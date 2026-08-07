@@ -118,12 +118,16 @@ class _Engine:
     # The dataset is tight face portraits; feeding whole photos
     # (background, clothes, scenery) biases the model toward "real".
     def _face_crop(self, pil_image):
+        crop, _ = self._face_crop_ex(pil_image)
+        return crop
+
+    def _face_crop_ex(self, pil_image):
         import cv2
         import numpy as np
         from PIL import Image
 
         if not os.path.exists(YUNET_PATH):
-            return pil_image  # detector model missing → analyze full frame
+            return pil_image, None  # detector missing → analyze full frame
 
         if self._detector is None:
             self._detector = cv2.FaceDetectorYN_create(
@@ -143,7 +147,7 @@ class _Engine:
         self._detector.setInputSize((bgr.shape[1], bgr.shape[0]))
         _, faces = self._detector.detect(bgr)
         if faces is None or len(faces) == 0:
-            return pil_image  # no face found → analyze the full frame
+            return pil_image, None  # no face found → analyze the full frame
 
         # Largest detected face = the main subject
         best = faces[int(np.argmax(faces[:, 2] * faces[:, 3]))]
@@ -153,8 +157,18 @@ class _Engine:
         x0 = max(0, int(x - m));  y0 = max(0, int(y - m))
         x1 = min(w, int(x + fw + m));  y1 = min(h, int(y + fh + m))
         if x1 <= x0 or y1 <= y0:
-            return pil_image
-        return Image.fromarray(rgb[y0:y1, x0:x1])
+            return pil_image, None
+
+        # YuNet landmarks (5 points) → crop coordinates, for the
+        # explainability "focus region" text
+        names = ["right_eye", "left_eye", "nose", "mouth_right", "mouth_left"]
+        landmarks = {}
+        for i, name in enumerate(names):
+            lx = best[4 + i * 2] / scale - x0
+            ly = best[5 + i * 2] / scale - y0
+            landmarks[name] = (float(lx), float(ly))
+
+        return Image.fromarray(rgb[y0:y1, x0:x1]), landmarks
 
     # ---- probability vector over classes (input already face-cropped)
     # TTA: averages the prediction over the image + its mirror — a small
@@ -211,6 +225,74 @@ class _Engine:
         if not frames:
             raise ValueError("No readable frames in video")
         return self._verdict(probs_sum / frames), frames
+
+    # ---- Explainability: Grad-CAM on the last conv block ----
+    # Shows WHERE the model looked (its real internal attention) —
+    # we never fabricate claims about WHAT is wrong.
+    def explain(self, face_img, landmarks):
+        import cv2
+        import numpy as np
+        import base64
+
+        torch = self.torch
+        x = self.tf(face_img.convert("RGB")).unsqueeze(0)
+
+        captured = {}
+        layer = self.model.features[-1]
+        fh = layer.register_forward_hook(
+            lambda m, i, o: captured.__setitem__("act", o))
+        bh = layer.register_full_backward_hook(
+            lambda m, gi, go: captured.__setitem__("grad", go[0]))
+        try:
+            self.model.zero_grad()
+            out = self.model(x)  # gradients ON for this single pass
+            cls = int(out.argmax(1))
+            out[0, cls].backward()
+            act = captured["act"][0]          # C×h×w
+            grad = captured["grad"][0]
+            weights = grad.mean(dim=(1, 2), keepdim=True)
+            cam = torch.relu((weights * act).sum(0)).detach().numpy()
+        finally:
+            fh.remove()
+            bh.remove()
+            self.model.zero_grad()
+
+        if cam.max() > 0:
+            cam = cam / cam.max()
+
+        # Hotspot in face-crop pixel coordinates
+        iy, ix = np.unravel_index(int(np.argmax(cam)), cam.shape)
+        fw, fh_ = face_img.size
+        hot_x = (ix + 0.5) / cam.shape[1] * fw
+        hot_y = (iy + 0.5) / cam.shape[0] * fh_
+
+        # Focus-region text, grounded in YuNet landmarks (no fabrication)
+        region = "the central face region"
+        if landmarks:
+            def dist(p):
+                return ((p[0] - hot_x) ** 2 + (p[1] - hot_y) ** 2) ** 0.5
+            nearest = min(landmarks.items(), key=lambda kv: dist(kv[1]))[0]
+            region = {
+                "right_eye": "the eye region", "left_eye": "the eye region",
+                "nose": "the nose area",
+                "mouth_right": "the mouth area", "mouth_left": "the mouth area",
+            }[nearest]
+
+        # Heatmap overlay image (JPEG data URL)
+        base = cv2.resize(np.array(face_img.convert("RGB")), (224, 224))
+        heat = cv2.resize((cam * 255).astype(np.uint8), (224, 224))
+        heat = cv2.applyColorMap(heat, cv2.COLORMAP_JET)
+        overlay = cv2.addWeighted(cv2.cvtColor(base, cv2.COLOR_RGB2BGR), 0.55,
+                                  heat, 0.45, 0)
+        ok, buf = cv2.imencode(".jpg", overlay, [cv2.IMWRITE_JPEG_QUALITY, 82])
+        data_url = ("data:image/jpeg;base64," +
+                    base64.b64encode(buf).decode()) if ok else None
+
+        return {
+            "heatmapDataUrl": data_url,
+            "focusRegion": region,
+            "note": f"Model attention concentrated around {region}.",
+        }
 
     # ---- probs → (prediction, confidence)
     def _verdict(self, probs):
@@ -305,7 +387,7 @@ def analyze_file(path, file_type, frame_rate=1.0):
     # Image: ensemble — our model + every available HF verifier vote P(fake)
     from PIL import Image
     with Image.open(path) as im:
-        face = eng._face_crop(im)
+        face, landmarks = eng._face_crop_ex(im)
         probs = eng._probs_raw(face)
         fake_i = eng.classes.index("fake")
         votes = [{"model": "MobileNetV3 (ours)", "pFake": round(float(probs[fake_i]), 4)}]
@@ -315,6 +397,13 @@ def analyze_file(path, file_type, frame_rate=1.0):
                 votes.append({"model": hf.name, "pFake": round(hf.p_fake(face), 4)})
             except Exception:
                 pass
+
+        # Explainability (Grad-CAM heatmap + grounded focus text) —
+        # best-effort: any failure just omits the section
+        try:
+            explain = eng.explain(face, landmarks)
+        except Exception:
+            explain = None
 
     # Weighted vote: our model leads (it's calibrated to our domain and
     # demo data); pretrained verifiers are advisory — testing showed they
@@ -340,4 +429,5 @@ def analyze_file(path, file_type, frame_rate=1.0):
         "framesAnalyzed": 1,
         "ensemble": votes,
         "disputed": disputed,
+        "explain": explain,
     }

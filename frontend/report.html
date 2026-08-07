@@ -179,6 +179,23 @@
             <span class="badge badge-warning" id="risk-badge">— risk</span>
           </div>
 
+          <!-- 2b. Analyzed media (photo + attention heatmap) — hidden when
+               the scan carries no imagery (URL scans / cleared history) -->
+          <section class="doc-section" id="media-section" aria-label="Analyzed media" hidden>
+            <h2 class="eyebrow doc-section-title">Analyzed media</h2>
+            <div class="doc-media">
+              <figure id="doc-photo-wrap" hidden>
+                <img id="doc-photo" alt="The analyzed media">
+                <figcaption>Submitted media</figcaption>
+              </figure>
+              <figure id="doc-heat-wrap" hidden>
+                <img id="doc-heatmap" alt="Model attention heatmap">
+                <figcaption>Model attention (Grad-CAM)</figcaption>
+              </figure>
+            </div>
+            <p class="text-xs text-3" id="doc-focus" hidden></p>
+          </section>
+
           <!-- 3. File details -->
           <section class="doc-section" aria-label="File details">
             <h2 class="eyebrow doc-section-title">File details</h2>

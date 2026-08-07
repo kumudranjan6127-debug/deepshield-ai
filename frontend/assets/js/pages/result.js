@@ -30,7 +30,49 @@ document.addEventListener('DOMContentLoaded', () => {
   renderModel();
   renderVerdict(scan, isFake, isVideo);
   renderMetrics(scan);
+  renderInsights(scan);
 });
+
+/* ---- Analysis insights: judge votes + Grad-CAM heatmap ---- */
+function renderInsights(scan) {
+  const card = document.getElementById('insights-card');
+  const votes = Array.isArray(scan.ensemble)
+    ? scan.ensemble.filter(v => typeof v.pFake === 'number')
+    : [];
+  const explain = scan.explain || null;
+  if (!votes.length && !explain) return; // nothing to show (echo/video scans)
+
+  card.hidden = false;
+
+  if (votes.length) {
+    document.getElementById('votes-list').innerHTML = votes.map(v => {
+      const pct = Math.round(v.pFake * 100);
+      return `
+        <div class="vote-row">
+          <div class="vote-head">
+            <span>${DS.util.escapeHtml(v.model)}</span>
+            <span class="mono">${pct}% fake</span>
+          </div>
+          <div class="vote-track">
+            <div class="vote-fill${v.pFake >= 0.5 ? ' fake' : ''}" style="width: ${pct}%"></div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  if (explain && explain.heatmapDataUrl) {
+    document.getElementById('heatmap-img').src = explain.heatmapDataUrl;
+    document.getElementById('insight-heat').hidden = false;
+  }
+  if (explain && explain.note) {
+    const note = document.getElementById('focus-note');
+    note.textContent = explain.note;
+    note.hidden = false;
+  }
+  if (scan.disputed) document.getElementById('disputed-chip').hidden = false;
+
+  DS.icons();
+}
 
 /* ---- Media preview (image or dashed placeholder) ---- */
 function renderMedia(scan, isVideo) {

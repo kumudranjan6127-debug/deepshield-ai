@@ -83,9 +83,14 @@
     DS.session.set(DS.KEYS.SCAN, merged);
 
     // History: honor the auto-delete privacy setting — keep the media
-    // thumbnail out of durable storage (it also strains the ~5MB quota).
+    // thumbnail and heatmap out of durable storage (privacy + the ~5MB
+    // localStorage quota). The session copy keeps everything for the
+    // result/report pages.
     const entry = { ...merged };
-    if (DS.settings.get().autoDelete) delete entry.previewDataUrl;
+    if (DS.settings.get().autoDelete) {
+      delete entry.previewDataUrl;
+      delete entry.explain;
+    }
     DS.history.add(entry);
 
     // Success state: progress 100%, all stages done, ring → check

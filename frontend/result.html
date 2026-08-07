@@ -178,6 +178,31 @@
               <p class="text-2 text-sm verdict-note" id="verdict-note"></p>
             </section>
 
+            <!-- Analysis insights (explainability) — filled by result.js,
+                 hidden when the scan has no ensemble/explain data -->
+            <section class="card card-pad fade-up" data-delay="2" id="insights-card"
+                     aria-label="Analysis insights" hidden>
+              <div class="card-title"><i data-lucide="sparkles" class="icon"></i> Analysis insights</div>
+
+              <div class="insight-flex">
+                <figure class="insight-heat" id="insight-heat" hidden>
+                  <img id="heatmap-img" alt="Model attention heatmap over the analyzed face">
+                  <figcaption class="text-xs text-3">Model attention (Grad-CAM)</figcaption>
+                </figure>
+
+                <div class="insight-side">
+                  <p class="text-sm text-2" id="focus-note" hidden></p>
+
+                  <div class="votes" id="votes-list"><!-- vote bars injected --></div>
+
+                  <div class="badge badge-warning" id="disputed-chip" hidden>
+                    <i data-lucide="alert-triangle" class="icon-sm"></i>
+                    Models disagreed on this image
+                  </div>
+                </div>
+              </div>
+            </section>
+
             <!-- Metrics -->
             <section class="metrics-grid fade-up" data-delay="2" aria-label="Analysis metrics">
               <div class="stat-card">

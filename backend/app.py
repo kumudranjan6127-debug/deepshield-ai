@@ -191,12 +191,15 @@ def analyze():
                 tmp_path = os.path.join(UPLOAD_DIR, uuid.uuid4().hex + ".mp4")
                 file_size = download_video(url, tmp_path)
 
+        extras = {}
         if live and tmp_path:
             # ---- REAL inference: OpenCV sampling + MobileNetV3 on CPU
             result = inference.analyze_file(tmp_path, file_type, frame_rate)
             prediction = result["prediction"]
             confidence = result["confidence"]
             frames = result["framesAnalyzed"]
+            # explainability payload for the result/report pages
+            extras = {k: result.get(k) for k in ("ensemble", "disputed", "explain")}
         else:
             # ---- Echo fallback (no model yet, or metadata-only request)
             prediction, confidence, frames = verdict_for(file_name, file_size, file_type)
@@ -210,6 +213,7 @@ def analyze():
             "model": MODEL_INFO["name"],
             "device": MODEL_INFO["device"],
             "completedAt": datetime.now(timezone.utc).isoformat(),
+            **extras,
         })
 
     except ValueError as e:

@@ -58,6 +58,26 @@ function renderReport(scan) {
   set('verdict-text', isFake ? 'LIKELY DEEPFAKE' : 'LIKELY REAL');
   set('verdict-conf', `${scan.confidence}%`);
 
+  /* 2b. Analyzed media — photo + Grad-CAM heatmap (when available) */
+  const photo = scan.previewDataUrl || null;
+  const heat = (scan.explain && scan.explain.heatmapDataUrl) || null;
+  if (photo || heat) {
+    document.getElementById('media-section').hidden = false;
+    if (photo) {
+      document.getElementById('doc-photo').src = photo;
+      document.getElementById('doc-photo-wrap').hidden = false;
+    }
+    if (heat) {
+      document.getElementById('doc-heatmap').src = heat;
+      document.getElementById('doc-heat-wrap').hidden = false;
+    }
+    if (scan.explain && scan.explain.note) {
+      const focus = document.getElementById('doc-focus');
+      focus.textContent = scan.explain.note;
+      focus.hidden = false;
+    }
+  }
+
   const riskBadge = document.getElementById('risk-badge');
   const riskClass = { Low: 'badge-success', Medium: 'badge-warning', High: 'badge-danger' };
   riskBadge.className = `badge ${riskClass[risk] || 'badge-warning'}`;
