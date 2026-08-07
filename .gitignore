@@ -7,9 +7,9 @@ __pycache__/
 uploads/
 
 # ---- Firebase credentials ----
-# Copy assets/js/firebase-config.example.js -> firebase-config.js
+# Copy frontend/assets/js/firebase-config.example.js -> firebase-config.js
 # and fill your own keys. Without it the app runs in demo-login mode.
-assets/js/firebase-config.js
+frontend/assets/js/firebase-config.js
 
 # ---- OS / editor noise ----
 Thumbs.db

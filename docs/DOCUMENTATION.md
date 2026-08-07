@@ -40,6 +40,14 @@ Target hardware constraint (inherited from the product spec): must run smoothly 
 
 ## 2. Folder Structure
 
+> **Repository restructure (2026-08-07):** the project was reorganized into a
+> conventional split after this document was first written. Path mapping:
+> root `*.html` → **`frontend/`** · `assets/` → **`frontend/assets/`** ·
+> `app.py`, `inference.py` → **`backend/`** · this document → **`docs/`**.
+> New top level: `frontend/ · backend/ · models/ · training/ · docs/ ·
+> uploads/ (runtime) · venv/ (local)`. Everything below remains accurate
+> once that mapping is applied.
+
 ```
 g:\deepfake\
 ├── *.html               10 pages (one file per page; index.html = splash)

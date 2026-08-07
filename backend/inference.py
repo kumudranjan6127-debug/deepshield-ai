@@ -16,9 +16,10 @@ Design:
 
 import os
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
-CKPT_PATH = os.path.join(ROOT, "models", "deepshield_mobilenetv3.pth")
-YUNET_PATH = os.path.join(ROOT, "models", "face_detection_yunet.onnx")
+# Repo layout: backend/inference.py → models/ lives at the project root
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CKPT_PATH = os.path.join(BASE_DIR, "models", "deepshield_mobilenetv3.pth")
+YUNET_PATH = os.path.join(BASE_DIR, "models", "face_detection_yunet.onnx")
 
 _engine = None  # lazy singleton
 

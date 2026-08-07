@@ -11,7 +11,8 @@ Phase 2 (now):  echo engine — implements the exact same response
 Phase 4 (next): replace verdict_for() with real inference —
                 OpenCV preprocessing + MobileNetV3 (PyTorch, CPU).
 
-Run:   venv/Scripts/python app.py   then open   http://localhost:5000
+Run:   venv/Scripts/python backend/app.py   (or: npm run backend)
+Open:  http://localhost:5000
 ============================================================
 """
 
@@ -21,17 +22,15 @@ import uuid
 import urllib.request
 from datetime import datetime, timezone
 
-from flask import Flask, abort, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 
 import inference  # real engine (Phase 4) — safe to import before torch/model exist
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(ROOT, "uploads")
+# Repo layout: backend/app.py → project root is one level up
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-# Never serve these through the static catch-all
-BLOCKED_DIRS = {"venv", "uploads", "models", "__pycache__"}
-BLOCKED_EXTS = (".py", ".txt", ".md")
 
 app = Flask(__name__, static_folder=None)
 
@@ -49,16 +48,15 @@ MODEL_INFO = {
 
 @app.route("/")
 def home():
-    return send_from_directory(ROOT, "index.html")
+    return send_from_directory(FRONTEND_DIR, "index.html")
 
 
 @app.route("/<path:path>")
 def assets(path):
-    """Static catch-all for pages + assets (path-traversal safe)."""
-    top = path.split("/")[0]
-    if top in BLOCKED_DIRS or path.lower().endswith(BLOCKED_EXTS):
-        abort(404)
-    return send_from_directory(ROOT, path)
+    """Static catch-all for pages + assets. frontend/ contains only
+    public files, and send_from_directory is path-traversal safe —
+    backend code, models and uploads are outside the static root."""
+    return send_from_directory(FRONTEND_DIR, path)
 
 
 # ---------------------------------------------------------- helpers

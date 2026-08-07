@@ -8,7 +8,7 @@ Pure **HTML + CSS + vanilla JavaScript** — no frameworks, no build step, fully
 **Full app (frontend + API)** — Flask serves everything:
 
 ```
-venv\Scripts\python app.py     (or: npm run backend)
+npm run backend                (= venv\Scripts\python backend/app.py)
 → http://localhost:5000
 ```
 
@@ -43,21 +43,19 @@ When the Flask backend lands, point `DS.api` at it (`MODE: 'live'`); no page cod
 ## Structure
 
 ```
-assets/
-  css/
-    fonts.css        self-hosted variable fonts (Inter, Space Grotesk, JetBrains Mono)
-    variables.css    design tokens — single source of truth
-    base.css         reset, typography, utilities
-    components.css   component library (shell, buttons, cards, forms, …)
-    pages/           one stylesheet per page
-  js/
-    utils.js         DS namespace: storage, history, settings, auth, formatters
-    api.js           analysis engine interface (simulated ⇄ Flask-ready)
-    components.js    toasts, modals, sidebar, shell hydration, Lucide icons
-    pages/           one script per page
-    vendor/          lucide.min.js (icons, vendored — works offline)
-  fonts/  icons/  images/
-*.html               one file per page
+frontend/            UI — one .html per page + assets/
+  index.html ...     10 pages (splash - login - dashboard - ... - report)
+  assets/
+    css/             fonts, variables (design tokens), base, components, pages/
+    js/              utils (DS namespace), api (engine interface), components, pages/
+    fonts/ icons/    self-hosted variable fonts, favicon
+backend/             Flask server
+  app.py             serves frontend + /api/upload + /api/analyze + /api/health
+  inference.py       MobileNetV3 engine: YuNet face-crop, image + 1fps video scoring
+models/              trained checkpoint (.pth) + YuNet face detector (.onnx)
+training/            Colab notebook + result graphs
+docs/                full technical documentation
+uploads/             temporary staging (auto-cleaned, gitignored)
 ```
 
 ## Design system

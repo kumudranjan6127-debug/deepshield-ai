@@ -6,6 +6,6 @@
   "scripts": {
     "dev": "node serve.js",
     "start": "node serve.js",
-    "backend": "venv\\Scripts\\python app.py"
+    "backend": "venv\\Scripts\\python backend/app.py"
   }
 }
