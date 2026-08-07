@@ -4,6 +4,9 @@
 # ---- Phase 2: web server (installed) ----
 flask>=3.1
 
+# ---- Ensemble verifiers (HuggingFace, images only) ----
+transformers>=5.0
+
 # ---- Phase 4: AI engine (uncomment when the model lands) ----
 # PyTorch CPU build — install with the CPU index, NOT plain `pip install torch`:
 #   venv\Scripts\pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
