@@ -21,6 +21,17 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CKPT_PATH = os.path.join(BASE_DIR, "models", "deepshield_mobilenetv3.pth")
 YUNET_PATH = os.path.join(BASE_DIR, "models", "face_detection_yunet.onnx")
 
+# ---- Ensemble: pretrained HuggingFace verifiers (images only) ----
+# Our MobileNetV3 is a fast GAN-face specialist; these add coverage for
+# other pipelines/generators. Loaded lazily; any that fail to load are
+# skipped, so the app degrades gracefully to MobileNetV3 alone.
+HF_MODELS = [
+    {"id": "prithivMLmods/Deep-Fake-Detector-v2-Model", "name": "ViT Deepfake v2"},
+    {"id": "Ateeqq/ai-vs-human-image-detector",         "name": "SigLIP AI-image"},
+]
+import re as _re
+_FAKE_LABEL = _re.compile(r"fake|deep|ai|artificial|synthetic|generat", _re.I)
+
 _engine = None  # lazy singleton
 
 
@@ -130,11 +141,15 @@ class _Engine:
             return pil_image
         return Image.fromarray(rgb[y0:y1, x0:x1])
 
-    # ---- single image (PIL) → probability vector over classes
-    def _probs(self, pil_image):
-        x = self.tf(self._face_crop(pil_image).convert("RGB")).unsqueeze(0)
+    # ---- probability vector over classes (input already face-cropped)
+    def _probs_raw(self, pil_image):
+        x = self.tf(pil_image.convert("RGB")).unsqueeze(0)
         with self.torch.no_grad():
             return self.torch.softmax(self.model(x), dim=1)[0]
+
+    # ---- crop + classify (used by the video path per-frame)
+    def _probs(self, pil_image):
+        return self._probs_raw(self._face_crop(pil_image))
 
     def predict_image(self, image_path):
         """→ (prediction 'real'|'deepfake', confidence int, frames=1)"""
@@ -199,18 +214,109 @@ def _get_engine() -> _Engine:
     return _engine
 
 
+# ---------------------------------------------------------- HF verifiers
+
+class _HFEngine:
+    """Generic wrapper around a HuggingFace image-classification model.
+    Maps whatever labels the model uses onto P(fake) via regex."""
+
+    def __init__(self, model_id, name):
+        import torch
+        from transformers import AutoImageProcessor, AutoModelForImageClassification
+
+        self.name = name
+        self.torch = torch
+        # local_files_only: inference must NEVER wait on the network —
+        # a partially-downloaded model fails instantly and gets skipped.
+        self.processor = AutoImageProcessor.from_pretrained(model_id, local_files_only=True)
+        self.model = AutoModelForImageClassification.from_pretrained(model_id, local_files_only=True)
+        self.model.eval()
+
+        # Which output index means "fake"?
+        self.fake_idx = None
+        for idx, label in self.model.config.id2label.items():
+            if _FAKE_LABEL.search(str(label)):
+                self.fake_idx = int(idx)
+                break
+        if self.fake_idx is None:
+            raise ValueError(f"{model_id}: no fake-like label in {self.model.config.id2label}")
+
+    def p_fake(self, pil_image):
+        inputs = self.processor(images=pil_image.convert("RGB"), return_tensors="pt")
+        with self.torch.no_grad():
+            probs = self.torch.softmax(self.model(**inputs).logits, dim=1)[0]
+        return float(probs[self.fake_idx])
+
+
+_hf_engines = None  # lazy: None = not tried yet, [] = tried, none loaded
+
+
+def _get_hf_engines():
+    global _hf_engines
+    if _hf_engines is None:
+        _hf_engines = []
+        for cfg in HF_MODELS:
+            try:
+                _hf_engines.append(_HFEngine(cfg["id"], cfg["name"]))
+            except Exception:
+                pass  # offline / not downloaded / bad model → skip
+    return _hf_engines
+
+
 # ---------------------------------------------------------- public API
 
 def analyze_file(path, file_type, frame_rate=1.0):
     """Main entry for app.py.
-    → dict {prediction, confidence, framesAnalyzed}"""
+    → dict {prediction, confidence, framesAnalyzed, ensemble?}"""
     eng = _get_engine()
+
+    # Video: our fast model only — running ViTs per-frame is too slow on CPU
     if file_type == "video":
         (prediction, confidence), frames = eng.predict_video(path, frame_rate)
+        return {
+            "prediction": prediction,
+            "confidence": confidence,
+            "framesAnalyzed": frames,
+            "ensemble": [{"model": "MobileNetV3 (ours)", "pFake": None,
+                          "note": "video mode — single fast model"}],
+        }
+
+    # Image: ensemble — our model + every available HF verifier vote P(fake)
+    from PIL import Image
+    with Image.open(path) as im:
+        face = eng._face_crop(im)
+        probs = eng._probs_raw(face)
+        fake_i = eng.classes.index("fake")
+        votes = [{"model": "MobileNetV3 (ours)", "pFake": round(float(probs[fake_i]), 4)}]
+
+        for hf in _get_hf_engines():
+            try:
+                votes.append({"model": hf.name, "pFake": round(hf.p_fake(face), 4)})
+            except Exception:
+                pass
+
+    # Weighted vote: our model leads (it's calibrated to our domain and
+    # demo data); pretrained verifiers are advisory — testing showed they
+    # carry their own dataset biases (one flagged an authentic official
+    # portrait at 0.67 fake), so they must not be able to outvote alone.
+    OWN_WEIGHT = 0.65
+    if len(votes) > 1:
+        w_hf = (1.0 - OWN_WEIGHT) / (len(votes) - 1)
+        weights = [OWN_WEIGHT] + [w_hf] * (len(votes) - 1)
     else:
-        (prediction, confidence), frames = eng.predict_image(path)
+        weights = [1.0]
+    for v, w in zip(votes, weights):
+        v["weight"] = round(w, 3)
+
+    p = sum(v["pFake"] * v["weight"] for v in votes)
+    prediction = "deepfake" if p >= 0.5 else "real"
+    confidence = int(round((p if p >= 0.5 else 1 - p) * 100))
+    disputed = any((v["pFake"] >= 0.5) != (p >= 0.5) for v in votes)
+
     return {
         "prediction": prediction,
         "confidence": confidence,
-        "framesAnalyzed": frames,
+        "framesAnalyzed": 1,
+        "ensemble": votes,
+        "disputed": disputed,
     }
