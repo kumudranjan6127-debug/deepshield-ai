@@ -9,7 +9,7 @@
    ============================================================ */
 
 DS.api = {
-  MODE: 'simulated',            // 'simulated' | 'live'
+  MODE: 'live',                 // 'live' (Flask + real model) | 'simulated' (JS mock)
   ENDPOINT: '/api/analyze',     // Flask route (live mode)
 
   MODEL: {
@@ -34,16 +34,65 @@ DS.api = {
     return DS.api._analyzeSimulated(scan, hooks);
   },
 
-  /* ---------- live (Flask) ---------- */
-  async _analyzeLive(scan, hooks) {
-    // Placeholder wiring for V2: POST multipart to Flask, poll or await JSON.
-    const res = await fetch(DS.api.ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(scan),
-    });
-    if (!res.ok) throw new Error(`Analysis failed (${res.status})`);
-    return res.json();
+  /* ---------- live (Flask + real MobileNetV3) ----------
+     The server call is synchronous, so we drive the progress/stage/log
+     hooks from a timer while waiting, then snap to 100% on the result. */
+  async _analyzeLive(scan, hooks = {}) {
+    const { onStage = () => {}, onLog = () => {}, onProgress = () => {}, onEta = () => {} } = hooks;
+    const isVideo = scan.fileType === 'video';
+    const stages = DS.api._stages(isVideo);
+
+    onLog('engine: DeepShield live (Flask · real inference)');
+    onLog(`model:  ${DS.api.MODEL.name} (${DS.api.MODEL.params} params, CPU)`);
+    onLog(`input:  ${scan.fileName}${scan.fileSize ? ` (${DS.util.formatBytes(scan.fileSize)})` : ''}`);
+
+    // Ease toward 92% while the server works (video takes longer on CPU)
+    const est = isVideo ? 20000 : 5000;
+    let pct = 0;
+    let lastStage = -1;
+    const tick = setInterval(() => {
+      pct = Math.min(92, pct + (92 - pct) * 0.055);
+      onProgress(pct);
+      onEta(Math.max(1, Math.ceil((est * (1 - pct / 100)) / 1000)));
+
+      let acc = 0, idx = 0;
+      for (let i = 0; i < stages.length; i++) {
+        acc += stages[i].weight;
+        if (pct <= acc) { idx = i; break; }
+        idx = i;
+      }
+      if (idx !== lastStage) {
+        lastStage = idx;
+        onStage(idx, stages[idx].label);
+        onLog(`stage:  ${stages[idx].label.toLowerCase()} …`);
+      }
+    }, 300);
+
+    try {
+      const res = await fetch(DS.api.ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uploadId: scan.uploadId || null,   // staged file (from /api/upload)
+          url: scan.sourceUrl || null,       // direct-MP4 scans
+          fileName: scan.fileName,
+          fileType: scan.fileType,
+          fileSize: scan.fileSize,
+          frameRate: DS.settings.get().frameRate,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Analysis failed (${res.status})`);
+      }
+      const result = await res.json();
+      onProgress(100);
+      onStage(stages.length - 1, 'Complete');
+      onLog(`done:   prediction=${result.prediction} confidence=${result.confidence}%`);
+      return result;
+    } finally {
+      clearInterval(tick);
+    }
   },
 
   /* ---------- simulated ---------- */

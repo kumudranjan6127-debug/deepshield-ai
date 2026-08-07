@@ -73,3 +73,18 @@ document.addEventListener('DOMContentLoaded', () => {
     DS.toast("You're on the latest version", 'info');
   });
 });
+
+/* ---- Engine mode badge: ask the backend which engine is running ---- */
+document.addEventListener('DOMContentLoaded', () => {
+  const badge = document.getElementById('engine-mode');
+  if (!badge) return;
+  fetch('/api/health', { cache: 'no-store' })
+    .then(r => r.json())
+    .then(h => {
+      if (h.engine === 'live') {
+        badge.className = 'badge badge-success';
+        badge.textContent = 'Live — real model';
+      }
+    })
+    .catch(() => { /* backend down — honest default stays */ });
+});

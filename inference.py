@@ -93,7 +93,10 @@ class _Engine:
     def predict_image(self, image_path):
         """→ (prediction 'real'|'deepfake', confidence int, frames=1)"""
         from PIL import Image
-        probs = self._probs(Image.open(image_path))
+        # Context manager releases the file handle — without it Windows
+        # blocks the post-analysis delete of the uploaded file.
+        with Image.open(image_path) as im:
+            probs = self._probs(im)
         return self._verdict(probs), 1
 
     def predict_video(self, video_path, frame_rate=1.0, max_frames=60):

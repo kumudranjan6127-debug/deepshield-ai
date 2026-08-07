@@ -261,7 +261,7 @@
 
   /* ============ HANDOFF → PROCESSING ============ */
 
-  function startAnalysis() {
+  async function startAnalysis() {
     if (!currentFile || !ready) return;
     const scan = {
       id: DS.util.uid(),
@@ -272,6 +272,30 @@
       previewDataUrl: previewDataUrl,
       createdAt: new Date().toISOString(),
     };
+
+    // Live engine: a File object can't survive page navigation, so stage
+    // it on the server now; processing.html analyzes it via uploadId.
+    if (DS.api.MODE === 'live') {
+      const originalLabel = els.startBtn.innerHTML;
+      els.startBtn.disabled = true;
+      els.removeBtn.disabled = true;
+      els.startBtn.innerHTML = '<span class="loader" aria-hidden="true"></span> Uploading…';
+      try {
+        const fd = new FormData();
+        fd.append('file', currentFile);
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error();
+        scan.uploadId = (await res.json()).uploadId;
+      } catch {
+        DS.toast('Could not reach the analysis server — is the backend running?', 'error');
+        els.startBtn.disabled = false;
+        els.removeBtn.disabled = false;
+        els.startBtn.innerHTML = originalLabel;
+        DS.icons();
+        return;
+      }
+    }
+
     DS.session.set(DS.KEYS.SCAN, scan);
     window.location.href = 'processing.html';
   }
@@ -298,6 +322,7 @@
         fileType: 'video',
         fileSize: null,
         source: 'url',
+        sourceUrl: els.urlInput.value.trim(), // live engine downloads from here
         previewDataUrl: null,
         createdAt: new Date().toISOString(),
       };

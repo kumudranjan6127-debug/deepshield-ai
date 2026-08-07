@@ -135,6 +135,25 @@ def health():
     })
 
 
+ALLOWED_UPLOAD_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".webm", ".mov"}
+
+
+@app.post("/api/upload")
+def upload():
+    """Stage a file for analysis. The browser can't carry a File object
+    across page navigation, so the upload page parks it here and passes
+    the returned uploadId to processing.html via the scan object."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file received"}), 400
+    f = request.files["file"]
+    ext = os.path.splitext(f.filename or "")[1].lower()
+    if ext not in ALLOWED_UPLOAD_EXTS:
+        return jsonify({"error": "Unsupported file type"}), 400
+    upload_id = uuid.uuid4().hex + ext
+    f.save(os.path.join(UPLOAD_DIR, upload_id))
+    return jsonify({"uploadId": upload_id})
+
+
 @app.post("/api/analyze")
 def analyze():
     started = time.perf_counter()
@@ -163,7 +182,14 @@ def analyze():
             file_size = data.get("fileSize")
             file_type = data.get("fileType", "video")
             frame_rate = float(data.get("frameRate", 1))
-            if live and url:
+            upload_id = data.get("uploadId")
+            if live and upload_id:
+                # File was staged earlier via /api/upload (basename → no traversal)
+                staged = os.path.join(UPLOAD_DIR, os.path.basename(upload_id))
+                if os.path.exists(staged):
+                    tmp_path = staged
+                    file_size = file_size or os.path.getsize(staged)
+            elif live and url:
                 tmp_path = os.path.join(UPLOAD_DIR, uuid.uuid4().hex + ".mp4")
                 file_size = download_video(url, tmp_path)
 
