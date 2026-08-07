@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="DeepShield AI — live deepfake analysis in progress.">
+  <title>Processing · DeepShield AI</title>
+
+  <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+  <link rel="preload" href="assets/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/space-grotesk-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/jetbrains-mono-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <script src="assets/js/boot.js"></script>
+  <link rel="stylesheet" href="assets/css/fonts.css">
+  <link rel="stylesheet" href="assets/css/variables.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/pages/processing.css">
+</head>
+<body data-page="processing">
+
+  <div class="app">
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar" aria-label="Primary navigation">
+      <a class="sidebar-brand" href="dashboard.html">
+        <span class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 5.5l8 3v7c0 5.2-3.4 9.3-8 11-4.6-1.7-8-5.8-8-11v-7l8-3z"
+                  stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"
+                  fill="rgba(59,130,246,0.14)"/>
+            <path d="M11.5 16h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="16" cy="16" r="1.6" fill="currentColor"/>
+          </svg>
+        </span>
+        <span>
+          <span class="logo-name">DeepShield</span><br>
+          <span class="logo-sub">AI Detection</span>
+        </span>
+      </a>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Overview</div>
+          <a class="nav-link" href="dashboard.html">
+            <i data-lucide="layout-dashboard" class="icon"></i> Dashboard
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Analyze</div>
+          <a class="nav-link" href="upload-image.html">
+            <i data-lucide="image" class="icon"></i> Upload Image
+          </a>
+          <a class="nav-link" href="upload-video.html">
+            <i data-lucide="video" class="icon"></i> Upload Video
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Insights</div>
+          <a class="nav-link" href="report.html">
+            <i data-lucide="file-text" class="icon"></i> Reports
+          </a>
+          <a class="nav-link" href="about.html">
+            <i data-lucide="info" class="icon"></i> About
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">System</div>
+          <a class="nav-link" href="settings.html">
+            <i data-lucide="settings" class="icon"></i> Settings
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-status">
+        <div class="flex items-center justify-between" style="margin-bottom: 8px;">
+          <span class="text-xs text-2" style="font-weight: 600;">System status</span>
+          <span class="badge badge-success"><span class="badge-dot pulse"></span>Operational</span>
+        </div>
+        <div class="flex items-center gap-1 text-xs text-3">
+          <i data-lucide="cpu" class="icon-sm"></i>
+          CPU-optimized inference
+        </div>
+      </div>
+    </aside>
+
+    <div class="sidebar-overlay" aria-hidden="true"></div>
+
+    <!-- ================= MAIN ================= -->
+    <div class="app-main">
+
+      <header class="navbar">
+        <div class="flex items-center gap-1">
+          <button class="sidebar-toggle" data-sidebar-toggle aria-label="Toggle navigation">
+            <i data-lucide="menu" class="icon"></i>
+          </button>
+          <span class="navbar-title">Processing</span>
+        </div>
+        <div class="navbar-right">
+          <span class="badge badge-info">
+            <i data-lucide="brain-circuit" class="icon-sm"></i>
+            MobileNetV3 · CPU
+          </span>
+          <button class="btn-icon" data-logout aria-label="Log out" title="Log out">
+            <i data-lucide="log-out" class="icon"></i>
+          </button>
+          <span class="avatar" data-avatar aria-hidden="true">U</span>
+        </div>
+      </header>
+
+      <main class="page">
+        <div class="proc-col">
+
+          <!-- Scanner visual + heading -->
+          <section class="proc-hero fade-up" aria-label="Analysis status">
+            <div class="scanner" id="scanner" aria-hidden="true">
+              <span class="scanner-pulse"></span>
+              <span class="scanner-ring"></span>
+              <span class="scanner-core" id="scanner-core">
+                <i data-lucide="scan-face" class="icon-xl"></i>
+              </span>
+            </div>
+            <h1 id="proc-title">Analyzing…</h1>
+            <p class="text-sm" id="proc-sub">MobileNetV3 inference · CPU</p>
+          </section>
+
+          <!-- Progress -->
+          <section class="card card-pad fade-up" data-delay="1" aria-label="Overall progress">
+            <div class="proc-progress-row">
+              <span class="proc-pct mono" id="proc-pct">0%</span>
+              <span class="mono text-sm text-2" id="proc-eta">estimating…</span>
+            </div>
+            <div class="progress">
+              <div class="progress-bar" id="proc-bar" style="width: 0%;"></div>
+            </div>
+          </section>
+
+          <!-- Pipeline stages -->
+          <section class="card card-pad fade-up" data-delay="2" aria-label="Pipeline stages">
+            <div class="card-title"><i data-lucide="activity" class="icon"></i> Pipeline</div>
+            <ul class="stage-list" id="stage-list" role="list">
+              <!-- rows injected by processing.js -->
+            </ul>
+          </section>
+
+          <!-- Engine console -->
+          <section class="card console fade-up" data-delay="3" aria-label="Engine output">
+            <div class="console-head">
+              <span class="console-label text-xs">Engine output</span>
+              <span class="badge"><i data-lucide="cpu" class="icon-sm"></i> CPU</span>
+            </div>
+            <div class="console-body mono text-xs" id="console-body" role="log">
+              <!-- log lines injected by processing.js -->
+            </div>
+          </section>
+
+          <!-- Badges + cancel -->
+          <section class="proc-foot fade-up" data-delay="4" aria-label="Runtime details">
+            <div class="proc-badges">
+              <span class="badge"><i data-lucide="cpu" class="icon-sm"></i> CPU inference</span>
+              <span class="badge"><i data-lucide="brain-circuit" class="icon-sm"></i> MobileNetV3-Small</span>
+              <span class="badge"><i data-lucide="hard-drive" class="icon-sm"></i> Local processing</span>
+            </div>
+            <button class="btn btn-ghost" id="cancel-btn" data-modal-open="cancel-modal">
+              <i data-lucide="x" class="icon-sm"></i> Cancel
+            </button>
+          </section>
+
+        </div>
+      </main>
+
+      <footer class="footer">
+        <span>© <span data-year>2026</span> DeepShield AI — Deepfake detection for everyone.</span>
+        <span class="flex items-center gap-2">
+          <a href="about.html">About</a>
+          <a href="settings.html">Settings</a>
+        </span>
+      </footer>
+
+    </div>
+  </div>
+
+  <!-- Cancel confirmation modal -->
+  <div class="modal-overlay" id="cancel-modal" role="dialog" aria-modal="true" aria-labelledby="cancel-modal-title">
+    <div class="modal">
+      <h3 class="modal-title" id="cancel-modal-title">Cancel this analysis?</h3>
+      <p class="modal-body">The scan will stop and you&rsquo;ll return to the dashboard. You can start a new analysis anytime.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-modal-close>Keep analyzing</button>
+        <button class="btn btn-danger" id="cancel-confirm">Cancel scan</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/js/vendor/lucide-lite.min.js" defer></script>
+  <script src="assets/js/utils.js" defer></script>
+  <script src="assets/js/api.js" defer></script>
+  <script src="assets/js/components.js" defer></script>
+  <script src="assets/js/pages/processing.js" defer></script>
+</body>
+</html>

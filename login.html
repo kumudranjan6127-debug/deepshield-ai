@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Sign in to DeepShield AI — AI-powered deepfake detection.">
+  <title>Sign in · DeepShield AI</title>
+
+  <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+  <link rel="preload" href="assets/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/space-grotesk-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/jetbrains-mono-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <script src="assets/js/boot.js"></script>
+  <link rel="stylesheet" href="assets/css/fonts.css">
+  <link rel="stylesheet" href="assets/css/variables.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/pages/login.css">
+</head>
+<body data-page="login">
+
+  <main class="auth">
+    <div class="auth-wrap">
+
+      <!-- Brand row -->
+      <div class="auth-brand fade-up">
+        <span class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 5.5l8 3v7c0 5.2-3.4 9.3-8 11-4.6-1.7-8-5.8-8-11v-7l8-3z"
+                  stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"
+                  fill="rgba(59,130,246,0.14)"/>
+            <path d="M11.5 16h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="16" cy="16" r="1.6" fill="currentColor"/>
+          </svg>
+        </span>
+        <span>
+          <span class="logo-name">DeepShield</span><br>
+          <span class="logo-sub">AI Detection</span>
+        </span>
+      </div>
+
+      <!-- Auth card -->
+      <section class="card card-pad-lg auth-card fade-up" data-delay="1" aria-label="Sign in">
+        <div class="auth-head">
+          <h1 id="auth-title">Welcome back</h1>
+          <p id="auth-sub">Sign in to continue to DeepShield.</p>
+        </div>
+
+        <form id="login-form" novalidate>
+          <div class="field" id="field-email">
+            <label class="field-label" for="email">Email</label>
+            <div class="input-group">
+              <i data-lucide="mail" class="icon"></i>
+              <input class="input" type="email" id="email" name="email"
+                     placeholder="you@example.com" autocomplete="email">
+            </div>
+            <span class="field-error">Enter a valid email address.</span>
+          </div>
+
+          <div class="field" id="field-password">
+            <label class="field-label" for="password">Password</label>
+            <div class="input-group">
+              <i data-lucide="lock" class="icon"></i>
+              <input class="input input-pr" type="password" id="password" name="password"
+                     placeholder="••••••••" autocomplete="current-password">
+              <button class="input-toggle" type="button" id="toggle-password" aria-label="Show password">
+                <i data-lucide="eye" class="icon-sm"></i>
+              </button>
+            </div>
+            <span class="field-error">Password must be at least 4 characters.</span>
+          </div>
+
+          <button class="btn btn-primary btn-block auth-submit" type="submit" id="login-btn">
+            Sign in <i data-lucide="arrow-right" class="icon-sm"></i>
+          </button>
+        </form>
+
+        <button class="auth-switch text-xs" type="button" id="mode-toggle" hidden>
+          New to DeepShield? <span>Create an account</span>
+        </button>
+
+        <div class="auth-divider" aria-hidden="true">or</div>
+
+        <button class="btn btn-ghost btn-block" type="button" id="google-btn" hidden>
+          <svg class="icon-sm" viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.5 6.1 29.5 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.7-.4-3.9z"/>
+            <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+            <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.6 39.6 16.3 44 24 44z"/>
+            <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.7l6.2 5.2C36.9 42.6 44 37 44 24c0-1.3-.1-2.7-.4-3.9z"/>
+          </svg>
+          Continue with Google
+        </button>
+
+        <button class="btn btn-ghost btn-block" type="button" id="guest-btn" style="margin-top: 8px;">
+          <i data-lucide="user" class="icon-sm"></i> Continue as guest
+        </button>
+
+        <p class="text-xs text-3 auth-note" id="auth-note">Demo build — any credentials work. No data leaves your device.</p>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Firebase (compat builds — work without a bundler). If the CDN is
+       unreachable or the config is unfilled, login.js falls back to demo mode. -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js" defer></script>
+  <script src="assets/js/firebase-config.js" defer></script>
+
+  <script src="assets/js/vendor/lucide-lite.min.js" defer></script>
+  <script src="assets/js/utils.js" defer></script>
+  <script src="assets/js/api.js" defer></script>
+  <script src="assets/js/components.js" defer></script>
+  <script src="assets/js/pages/login.js" defer></script>
+</body>
+</html>

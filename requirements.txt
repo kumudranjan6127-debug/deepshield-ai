@@ -1,0 +1,15 @@
+# DeepShield AI — Python dependencies
+# Install:  venv\Scripts\pip install -r requirements.txt
+
+# ---- Phase 2: web server (installed) ----
+flask>=3.1
+
+# ---- Phase 4: AI engine (uncomment when the model lands) ----
+# PyTorch CPU build — install with the CPU index, NOT plain `pip install torch`:
+#   venv\Scripts\pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# opencv-python
+# pillow
+# numpy
+
+# ---- Optional: server-side PDF reports ----
+# reportlab

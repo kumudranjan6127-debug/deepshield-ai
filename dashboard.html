@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="DeepShield AI — AI-powered deepfake detection dashboard.">
+  <title>Dashboard · DeepShield AI</title>
+
+  <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+  <link rel="preload" href="assets/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/space-grotesk-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/jetbrains-mono-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <script src="assets/js/boot.js"></script>
+  <link rel="stylesheet" href="assets/css/fonts.css">
+  <link rel="stylesheet" href="assets/css/variables.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/pages/dashboard.css">
+</head>
+<body data-page="dashboard">
+
+  <div class="app">
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar" aria-label="Primary navigation">
+      <a class="sidebar-brand" href="dashboard.html">
+        <span class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 5.5l8 3v7c0 5.2-3.4 9.3-8 11-4.6-1.7-8-5.8-8-11v-7l8-3z"
+                  stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"
+                  fill="rgba(59,130,246,0.14)"/>
+            <path d="M11.5 16h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="16" cy="16" r="1.6" fill="currentColor"/>
+          </svg>
+        </span>
+        <span>
+          <span class="logo-name">DeepShield</span><br>
+          <span class="logo-sub">AI Detection</span>
+        </span>
+      </a>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Overview</div>
+          <a class="nav-link active" href="dashboard.html">
+            <i data-lucide="layout-dashboard" class="icon"></i> Dashboard
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Analyze</div>
+          <a class="nav-link" href="upload-image.html">
+            <i data-lucide="image" class="icon"></i> Upload Image
+          </a>
+          <a class="nav-link" href="upload-video.html">
+            <i data-lucide="video" class="icon"></i> Upload Video
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Insights</div>
+          <a class="nav-link" href="report.html">
+            <i data-lucide="file-text" class="icon"></i> Reports
+          </a>
+          <a class="nav-link" href="about.html">
+            <i data-lucide="info" class="icon"></i> About
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">System</div>
+          <a class="nav-link" href="settings.html">
+            <i data-lucide="settings" class="icon"></i> Settings
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-status">
+        <div class="flex items-center justify-between" style="margin-bottom: 8px;">
+          <span class="text-xs text-2" style="font-weight: 600;">System status</span>
+          <span class="badge badge-success"><span class="badge-dot pulse"></span>Operational</span>
+        </div>
+        <div class="flex items-center gap-1 text-xs text-3">
+          <i data-lucide="cpu" class="icon-sm"></i>
+          CPU-optimized inference
+        </div>
+      </div>
+    </aside>
+
+    <div class="sidebar-overlay" aria-hidden="true"></div>
+
+    <!-- ================= MAIN ================= -->
+    <div class="app-main">
+
+      <header class="navbar">
+        <div class="flex items-center gap-1">
+          <button class="sidebar-toggle" data-sidebar-toggle aria-label="Toggle navigation">
+            <i data-lucide="menu" class="icon"></i>
+          </button>
+          <span class="navbar-title">Dashboard</span>
+        </div>
+        <div class="navbar-right">
+          <span class="badge badge-info">
+            <i data-lucide="brain-circuit" class="icon-sm"></i>
+            MobileNetV3 · CPU
+          </span>
+          <button class="btn-icon" data-logout aria-label="Log out" title="Log out">
+            <i data-lucide="log-out" class="icon"></i>
+          </button>
+          <span class="avatar" data-avatar aria-hidden="true">U</span>
+        </div>
+      </header>
+
+      <main class="page">
+
+        <!-- Welcome -->
+        <div class="page-head fade-up">
+          <div>
+            <h1 id="greeting">Welcome back</h1>
+            <p>Here's the latest across your deepfake detections.</p>
+          </div>
+          <a class="btn btn-primary" href="upload-image.html">
+            <i data-lucide="plus" class="icon-sm"></i> New scan
+          </a>
+        </div>
+
+        <!-- Stats -->
+        <section class="stat-grid fade-up" data-delay="1" aria-label="Statistics">
+          <div class="stat-card">
+            <div class="stat-head">
+              <span class="stat-label">Total scans</span>
+              <span class="stat-icon"><i data-lucide="scan-line" class="icon"></i></span>
+            </div>
+            <span class="stat-value mono" id="stat-total">0</span>
+            <span class="stat-sub">All-time analyses</span>
+          </div>
+          <div class="stat-card">
+            <div class="stat-head">
+              <span class="stat-label">Deepfakes flagged</span>
+              <span class="stat-icon danger"><i data-lucide="alert-triangle" class="icon"></i></span>
+            </div>
+            <span class="stat-value mono" id="stat-fake">0</span>
+            <span class="stat-sub">Flagged as likely synthetic</span>
+          </div>
+          <div class="stat-card">
+            <div class="stat-head">
+              <span class="stat-label">Authentic media</span>
+              <span class="stat-icon success"><i data-lucide="shield-check" class="icon"></i></span>
+            </div>
+            <span class="stat-value mono" id="stat-real">0</span>
+            <span class="stat-sub">Verified as likely real</span>
+          </div>
+          <div class="stat-card">
+            <div class="stat-head">
+              <span class="stat-label">Avg. confidence</span>
+              <span class="stat-icon"><i data-lucide="gauge" class="icon"></i></span>
+            </div>
+            <span class="stat-value mono" id="stat-conf">—</span>
+            <span class="stat-sub">Across completed scans</span>
+          </div>
+        </section>
+
+        <!-- Two-column layout -->
+        <div class="dash-grid">
+
+          <div class="dash-col-main">
+
+            <!-- Upload shortcuts -->
+            <section class="shortcut-grid fade-up" data-delay="2" aria-label="Quick actions">
+              <a class="card card-pad card-hover shortcut-card" href="upload-image.html">
+                <span class="upload-icon-ring">
+                  <i data-lucide="image" class="icon-xl"></i>
+                </span>
+                <div>
+                  <h3>Analyze an image</h3>
+                  <p class="text-sm">JPG, PNG or WebP — verdict in seconds.</p>
+                </div>
+                <i data-lucide="arrow-right" class="icon shortcut-arrow"></i>
+              </a>
+              <a class="card card-pad card-hover shortcut-card" href="upload-video.html">
+                <span class="upload-icon-ring">
+                  <i data-lucide="video" class="icon-xl"></i>
+                </span>
+                <div>
+                  <h3>Analyze a video</h3>
+                  <p class="text-sm">Sampled frame-by-frame on CPU.</p>
+                </div>
+                <i data-lucide="arrow-right" class="icon shortcut-arrow"></i>
+              </a>
+            </section>
+
+            <!-- Recent scans -->
+            <section class="card fade-up" data-delay="3" aria-label="Recent scans">
+              <div class="card-pad" style="padding-bottom: 0;">
+                <div class="card-title" style="margin-bottom: 0;">
+                  <i data-lucide="history" class="icon"></i> Recent scans
+                </div>
+              </div>
+              <div class="table-wrap" id="recent-wrap">
+                <table class="table" id="recent-table">
+                  <thead>
+                    <tr>
+                      <th>File</th>
+                      <th>Type</th>
+                      <th>Verdict</th>
+                      <th>Confidence</th>
+                      <th>Date</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="recent-body"><!-- rows injected by dashboard.js --></tbody>
+                </table>
+                <div class="empty-state" id="recent-empty" hidden>
+                  <i data-lucide="scan-line" class="icon-xl"></i>
+                  <h4>No scans yet</h4>
+                  <p>Upload an image or video and your detection history will appear here.</p>
+                  <a class="btn btn-ghost btn-sm" href="upload-image.html">Run your first scan</a>
+                </div>
+              </div>
+            </section>
+
+          </div>
+
+          <div class="dash-col-side">
+
+            <!-- AI status -->
+            <section class="card card-pad fade-up" data-delay="2" aria-label="AI model status">
+              <div class="card-title"><i data-lucide="brain-circuit" class="icon"></i> AI model</div>
+              <dl class="meta-list">
+                <div class="meta-row"><dt>Model</dt><dd class="mono">MobileNetV3-Small</dd></div>
+                <div class="meta-row"><dt>Backend</dt><dd>PyTorch</dd></div>
+                <div class="meta-row"><dt>Parameters</dt><dd class="mono">2.5M</dd></div>
+                <div class="meta-row"><dt>Input size</dt><dd class="mono">224 × 224</dd></div>
+                <div class="meta-row">
+                  <dt>Engine</dt>
+                  <dd><span class="badge badge-warning" id="engine-badge">Simulated (demo)</span></dd>
+                </div>
+                <div class="meta-row" id="acc-row" hidden>
+                  <dt>Test accuracy</dt>
+                  <dd class="mono" id="acc-val">—</dd>
+                </div>
+              </dl>
+            </section>
+
+          </div>
+        </div>
+
+      </main>
+
+      <footer class="footer">
+        <span>© <span data-year>2026</span> DeepShield AI — Deepfake detection for everyone.</span>
+        <span class="flex items-center gap-2">
+          <a href="about.html">About</a>
+          <a href="settings.html">Settings</a>
+        </span>
+      </footer>
+
+    </div>
+  </div>
+
+  <script src="assets/js/vendor/lucide-lite.min.js" defer></script>
+  <script src="assets/js/utils.js" defer></script>
+  <script src="assets/js/api.js" defer></script>
+  <script src="assets/js/components.js" defer></script>
+  <script src="assets/js/pages/dashboard.js" defer></script>
+</body>
+</html>

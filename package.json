@@ -1,0 +1,11 @@
+{
+  "name": "deepshield-ai",
+  "version": "1.0.0",
+  "description": "DeepShield AI — lightweight deepfake detection frontend (HTML/CSS/vanilla JS)",
+  "private": true,
+  "scripts": {
+    "dev": "node serve.js",
+    "start": "node serve.js",
+    "backend": "venv\\Scripts\\python app.py"
+  }
+}

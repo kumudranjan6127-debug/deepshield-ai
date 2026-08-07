@@ -1,0 +1,132 @@
+/* ============================================================
+   DeepShield AI — about.css (page-specific)
+   Mission, steps, technology, model card, responsible use.
+   ============================================================ */
+
+/* ---- Section rhythm ---- */
+.about-section { margin-bottom: var(--s-4); }
+
+.section-title {
+  font-size: 18px;
+  margin-bottom: var(--s-2);
+}
+
+/* ---- Mission ---- */
+.mission-card h2 {
+  margin: var(--s-1) 0 var(--s-2);
+  max-width: 560px;
+}
+.mission-card p {
+  font-size: 14px;
+  max-width: 640px;
+}
+.mission-card p + p { margin-top: var(--s-2); }
+
+/* ---- Shared icon tile ---- */
+.about-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  background: var(--primary-tint);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ---- How it works: step cards ---- */
+.about-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s-2);
+}
+
+.step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--s-2);
+}
+.step-num {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+
+.about-step h3 { margin-bottom: 6px; }
+.about-step p  { font-size: 13px; }
+
+/* ---- Technology grid ---- */
+.about-tech {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s-2);
+}
+
+.tech-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tech-card p { font-size: 13px; }
+
+/* ---- Model card + responsible use ---- */
+.about-duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-3);
+  align-items: start;
+}
+
+/* Warning-tinted card title (responsible use) */
+.card-title.warn .icon { color: var(--warning); }
+
+.use-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.use-list li {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.use-list .icon-sm {
+  color: var(--accent);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+/* ---- Version strip ---- */
+.version-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--text-3);
+}
+.version-strip .mono {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1024px) {
+  .about-steps { grid-template-columns: 1fr; }
+  .about-tech  { grid-template-columns: repeat(2, 1fr); }
+  .about-duo   { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .about-tech { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="DeepShield AI — AI-powered deepfake detection for images and video.">
+  <title>DeepShield AI — Deepfake Detection</title>
+
+  <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+  <link rel="preload" href="assets/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/space-grotesk-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/jetbrains-mono-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <script src="assets/js/boot.js"></script>
+  <link rel="stylesheet" href="assets/css/fonts.css">
+  <link rel="stylesheet" href="assets/css/variables.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/pages/splash.css">
+</head>
+<body data-page="splash">
+
+  <main class="splash" aria-label="DeepShield AI is starting">
+
+    <!-- Logo tile + scan ring + pulse rings -->
+    <div class="splash-logo fade-up">
+      <span class="scan-ring" aria-hidden="true"></span>
+      <span class="pulse-ring" aria-hidden="true"></span>
+      <span class="pulse-ring ring-2" aria-hidden="true"></span>
+      <span class="splash-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M16 5.5l8 3v7c0 5.2-3.4 9.3-8 11-4.6-1.7-8-5.8-8-11v-7l8-3z"
+                stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"
+                fill="rgba(59,130,246,0.14)"/>
+          <path d="M11.5 16h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="16" cy="16" r="1.6" fill="currentColor"/>
+        </svg>
+      </span>
+    </div>
+
+    <!-- Wordmark -->
+    <h1 class="splash-name fade-up" data-delay="1">DeepShield</h1>
+    <p class="splash-sub text-2 fade-up" data-delay="1">AI-Powered Deepfake Detection</p>
+
+    <!-- Boot progress: real bar + percentage + engine log -->
+    <div class="splash-progress fade-up" data-delay="2" role="status" aria-label="Loading">
+      <div class="boot-row">
+        <div class="progress"><div class="progress-bar" id="boot-bar"></div></div>
+        <span class="mono boot-pct" id="boot-pct">0%</span>
+      </div>
+      <div class="boot-log mono" id="boot-log" aria-hidden="true"></div>
+    </div>
+
+    <!-- Version footer -->
+    <footer class="splash-foot fade-up" data-delay="3">
+      <span class="badge"><i data-lucide="cpu" class="icon-sm"></i> CPU-optimized · MobileNetV3</span>
+      <span class="mono text-xs text-3">v1.0.0</span>
+    </footer>
+
+  </main>
+
+  <script src="assets/js/vendor/lucide-lite.min.js" defer></script>
+  <script src="assets/js/utils.js" defer></script>
+  <script src="assets/js/api.js" defer></script>
+  <script src="assets/js/components.js" defer></script>
+  <script src="assets/js/pages/splash.js" defer></script>
+</body>
+</html>

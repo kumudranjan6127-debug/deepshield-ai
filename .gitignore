@@ -1,0 +1,17 @@
+# ---- Python ----
+venv/
+__pycache__/
+*.pyc
+
+# ---- Runtime data (recreated automatically) ----
+uploads/
+
+# ---- Firebase credentials ----
+# Copy assets/js/firebase-config.example.js -> firebase-config.js
+# and fill your own keys. Without it the app runs in demo-login mode.
+assets/js/firebase-config.js
+
+# ---- OS / editor noise ----
+Thumbs.db
+.DS_Store
+*.log

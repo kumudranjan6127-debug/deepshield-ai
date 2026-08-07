@@ -1,0 +1,151 @@
+/* ============================================================
+   DeepShield AI — result.css (page-specific)
+   Verdict hero + confidence ring, media preview, metrics.
+   ============================================================ */
+
+/* ---- Layout ---- */
+.result-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: var(--s-3);
+  align-items: start;
+}
+
+.result-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+/* Long values (file names) stay on one line and ellipsize */
+.result-grid .meta-row dd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Media preview ---- */
+.result-media-wrap { border-bottom: 1px solid var(--border); }
+
+.result-media {
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+  border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0;
+  background: var(--surface);
+}
+
+.media-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-1);
+  margin: var(--s-2);
+  padding: var(--s-6) var(--s-3);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  color: var(--text-3);
+  font-size: 13px;
+  text-align: center;
+}
+.media-placeholder .icon-xl { color: var(--text-3); }
+
+/* ---- Verdict hero ---- */
+.verdict-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--s-2);
+  padding-block: var(--s-5);
+}
+
+.ring-wrap {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  margin-bottom: var(--s-1);
+}
+
+.confidence-ring {
+  width: 180px;
+  height: 180px;
+  transform: rotate(-90deg);
+}
+
+.ring-track {
+  fill: none;
+  stroke: rgba(148, 163, 184, 0.12);
+  stroke-width: 10;
+}
+
+.ring-value {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+  /* dasharray/dashoffset set by result.js; transition animates the sweep */
+  transition: stroke-dashoffset 1000ms var(--ease);
+}
+.ring-value.real { stroke: var(--success); }
+.ring-value.fake { stroke: var(--danger); }
+
+.ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.ring-pct {
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text);
+}
+
+/* Bigger verdict badge (reuses badge-success / badge-danger colors) */
+.verdict-badge {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 8px 18px;
+  gap: 8px;
+}
+.verdict-badge .icon { width: 18px; height: 18px; }
+
+.verdict-note { max-width: 420px; }
+
+/* ---- Metrics row (3-up stat cards) ---- */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s-2);
+}
+.metrics-grid .stat-value { font-size: 22px; }
+
+/* ---- Actions ---- */
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+.result-actions .btn-primary { margin-left: auto; }
+
+/* ---- Responsive ---- */
+@media (max-width: 1024px) {
+  .result-grid { grid-template-columns: 1fr; }
+  /* verdict first when stacked */
+  .result-col-right { order: -1; }
+}
+
+@media (max-width: 640px) {
+  .metrics-grid { grid-template-columns: 1fr; }
+  .result-actions .btn { flex: 1 1 auto; }
+  .result-actions .btn-primary { margin-left: 0; }
+}

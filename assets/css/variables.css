@@ -1,0 +1,83 @@
+/* ============================================================
+   DeepShield AI — Design tokens
+   Single source of truth. Never hardcode raw values in pages.
+   ============================================================ */
+
+:root {
+  /* ---- Color: canvas ---- */
+  --bg:            #050816;
+  --surface:       #0B1221;
+  --card:          #101827;
+  --card-raised:   #141D30;
+
+  /* ---- Color: brand ---- */
+  --primary:       #3B82F6;
+  --primary-hover: #2F6FE0;
+  --accent:        #60A5FA;
+
+  /* ---- Color: semantic ---- */
+  --success:       #22C55E;
+  --warning:       #F59E0B;
+  --danger:        #EF4444;
+
+  /* ---- Color: tints (translucent fills) ---- */
+  --primary-tint:  rgba(59, 130, 246, 0.12);
+  --accent-tint:   rgba(96, 165, 250, 0.10);
+  --success-tint:  rgba(34, 197, 94, 0.12);
+  --warning-tint:  rgba(245, 158, 11, 0.12);
+  --danger-tint:   rgba(239, 68, 68, 0.12);
+
+  /* ---- Color: text ---- */
+  --text:          #FFFFFF;
+  --text-2:        #94A3B8;
+  --text-3:        #64748B;
+
+  /* ---- Color: lines ---- */
+  --border:        rgba(148, 163, 184, 0.10);
+  --border-strong: rgba(148, 163, 184, 0.20);
+  --border-focus:  rgba(59, 130, 246, 0.55);
+
+  /* ---- Spacing (8px system) ---- */
+  --s-05: 4px;
+  --s-1:  8px;
+  --s-2:  16px;
+  --s-3:  24px;
+  --s-4:  32px;
+  --s-5:  40px;
+  --s-6:  48px;
+  --s-8:  64px;
+  --s-10: 80px;
+  --s-12: 96px;
+
+  /* ---- Radius ---- */
+  --r-sm:   8px;
+  --r-md:   12px;
+  --r-lg:   20px;
+  --r-full: 999px;
+
+  /* ---- Elevation ---- */
+  --shadow-sm: 0 1px 2px rgba(2, 6, 23, 0.4);
+  --shadow-md: 0 8px 24px rgba(2, 6, 23, 0.45);
+  --shadow-lg: 0 20px 48px rgba(2, 6, 23, 0.55);
+  --glow-primary: 0 0 0 1px rgba(59, 130, 246, 0.25), 0 8px 28px rgba(59, 130, 246, 0.18);
+
+  /* ---- Typography ---- */
+  --font-heading: 'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  /* ---- Motion ---- */
+  --ease:   cubic-bezier(0.22, 0.61, 0.36, 1);
+  --t-fast: 150ms;
+  --t-med:  240ms;
+  --t-slow: 400ms;
+
+  /* ---- Layout ---- */
+  --sidebar-w:   264px;
+  --navbar-h:    64px;
+  --content-max: 1200px;
+
+  /* ---- Glass ---- */
+  --glass-bg:   rgba(11, 18, 33, 0.72);
+  --glass-blur: saturate(140%) blur(14px);
+}

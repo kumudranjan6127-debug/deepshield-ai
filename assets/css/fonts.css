@@ -1,0 +1,28 @@
+/* ============================================================
+   DeepShield AI — Self-hosted variable fonts
+   Inter (body) · Space Grotesk (headings) · JetBrains Mono (numbers)
+   ============================================================ */
+
+@font-face {
+  font-family: 'Inter';
+  src: url('../fonts/inter-latin-wght.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('../fonts/space-grotesk-latin-wght.woff2') format('woff2-variations');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../fonts/jetbrains-mono-latin-wght.woff2') format('woff2-variations');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}

@@ -1,0 +1,106 @@
+/* ============================================================
+   DeepShield AI — login.css (page-specific)
+   Centered premium auth card.
+   ============================================================ */
+
+.auth {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-3);
+}
+
+.auth-wrap {
+  width: 100%;
+  max-width: 400px;
+}
+
+/* ---- Brand row above the card ---- */
+.auth-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: var(--s-3);
+}
+
+/* ---- Card header ---- */
+.auth-head {
+  text-align: center;
+  margin-bottom: var(--s-3);
+}
+.auth-head h1 {
+  font-size: 24px;
+  margin-bottom: var(--s-05);
+}
+.auth-head p { font-size: 14px; }
+
+/* ---- Password visibility toggle ---- */
+.input-pr { padding-right: 46px; }
+
+.input-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.input-toggle:hover {
+  color: var(--text);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+/* ---- Submit ---- */
+.auth-submit { margin-top: var(--s-1); }
+
+/* Compact spinner inside buttons */
+.btn .loader {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+/* ---- Divider ---- */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: var(--s-3) 0;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ---- Footnote ---- */
+.auth-note {
+  text-align: center;
+  margin-top: var(--s-2);
+  line-height: 1.5;
+}
+
+/* Sign-in ⇄ Create-account switcher */
+.auth-switch {
+  display: block;
+  margin: var(--s-2) auto 0;
+  color: var(--text-3);
+  transition: color var(--t-fast) var(--ease);
+}
+.auth-switch span { color: var(--accent); font-weight: 500; }
+.auth-switch:hover { color: var(--text-2); }

@@ -1,0 +1,218 @@
+/* ============================================================
+   DeepShield AI — Processing page
+   Scanner visual, progress readout, pipeline stage list,
+   engine console. Single centered column.
+   ============================================================ */
+
+/* ---- Centered column ---- */
+.proc-col {
+  max-width: 760px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+/* ============ SCANNER HERO ============ */
+
+.proc-hero {
+  text-align: center;
+  padding-top: var(--s-2);
+}
+.proc-hero h1 {
+  font-size: clamp(20px, 2.4vw, 24px); /* pin pre-h1 scale */
+  margin-top: var(--s-3);
+  overflow-wrap: anywhere;
+}
+.proc-hero p {
+  margin-top: var(--s-05);
+  color: var(--text-2);
+}
+
+.scanner {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin-inline: auto;
+}
+
+/* Soft pulsing ring behind everything */
+.scanner-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-full);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  animation: scannerPulse 2.6s var(--ease) infinite;
+}
+@keyframes scannerPulse {
+  0%        { transform: scale(1);    opacity: 0.8; }
+  70%, 100% { transform: scale(1.32); opacity: 0; }
+}
+
+/* Rotating conic arc (masked to a thin ring) */
+.scanner-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-full);
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(59, 130, 246, 0.7) 100deg,
+    transparent 120deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  animation: scannerSpin 2.4s linear infinite;
+}
+@keyframes scannerSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Icon core */
+.scanner-core {
+  position: absolute;
+  inset: 12px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+  transition: background var(--t-med) var(--ease),
+              border-color var(--t-med) var(--ease),
+              color var(--t-med) var(--ease);
+}
+
+/* Success state — motion stops, core goes green */
+.scanner.done .scanner-ring,
+.scanner.done .scanner-pulse {
+  animation: none;
+  opacity: 0;
+}
+.scanner.done .scanner-core {
+  background: var(--success-tint);
+  border-color: rgba(34, 197, 94, 0.45);
+  color: var(--success);
+}
+
+/* ============ PROGRESS CARD ============ */
+
+.proc-progress-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+}
+.proc-pct {
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text);
+}
+
+/* ============ STAGE LIST ============ */
+
+.stage-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stage-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  color: var(--text-3);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.stage-row.active {
+  background: var(--primary-tint);
+  color: var(--text);
+}
+.stage-row.done { color: var(--text-2); }
+
+/* Fixed-size status slot so labels stay aligned across states */
+.stage-status {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.stage-status .stage-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--border-strong);
+}
+.stage-status .loader {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+.stage-status .icon-sm { color: var(--success); }
+
+/* ============ ENGINE CONSOLE ============ */
+
+.console { overflow: hidden; } /* clip the inset body to the card radius */
+
+.console-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--border);
+}
+.console-label {
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+/* Dark inset log area */
+.console-body {
+  height: 200px;
+  overflow-y: auto;
+  padding: var(--s-2) var(--s-3);
+  background: var(--bg);
+  border-radius: 0 0 calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px);
+  line-height: 1.8;
+  color: var(--text-2);
+}
+.console-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.console-time { color: var(--text-3); }
+
+/* ============ FOOTER ROW (badges + cancel) ============ */
+
+.proc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+.proc-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  flex-wrap: wrap;
+}
+
+/* ============ RESPONSIVE ============ */
+
+@media (max-width: 640px) {
+  .proc-pct { font-size: 28px; }
+  .proc-foot { justify-content: center; }
+  .console-body { height: 170px; }
+}

@@ -1,0 +1,55 @@
+/* ============================================================
+   DeepShield AI — dashboard.css (page-specific)
+   ============================================================ */
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+  align-items: start;
+}
+
+.dash-col-main,
+.dash-col-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+/* ---- Upload shortcuts ---- */
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-2);
+}
+
+.shortcut-card {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--text);
+}
+.shortcut-card h3 { margin-bottom: 2px; }
+.shortcut-card .upload-icon-ring { width: 52px; height: 52px; flex-shrink: 0; }
+.shortcut-card .upload-icon-ring .icon-xl { width: 24px; height: 24px; }
+
+.shortcut-arrow {
+  margin-left: auto;
+  color: var(--text-3);
+  transition: transform var(--t-med) var(--ease), color var(--t-med) var(--ease);
+}
+.shortcut-card:hover .shortcut-arrow {
+  transform: translateX(4px);
+  color: var(--accent);
+}
+
+
+/* ---- Responsive ---- */
+@media (max-width: 1024px) {
+  .dash-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .shortcut-grid { grid-template-columns: 1fr; }
+}
