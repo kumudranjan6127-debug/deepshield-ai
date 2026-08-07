@@ -18,6 +18,7 @@ import os
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CKPT_PATH = os.path.join(ROOT, "models", "deepshield_mobilenetv3.pth")
+YUNET_PATH = os.path.join(ROOT, "models", "face_detection_yunet.onnx")
 
 _engine = None  # lazy singleton
 
@@ -84,9 +85,53 @@ class _Engine:
             "trained_on": ckpt.get("trained_on"),
         }
 
+        self._detector = None  # lazy YuNet face detector (OpenCV 5 DNN)
+
+    # ---- face crop: align inference with the training domain ----
+    # The dataset is tight face portraits; feeding whole photos
+    # (background, clothes, scenery) biases the model toward "real".
+    def _face_crop(self, pil_image):
+        import cv2
+        import numpy as np
+        from PIL import Image
+
+        if not os.path.exists(YUNET_PATH):
+            return pil_image  # detector model missing → analyze full frame
+
+        if self._detector is None:
+            self._detector = cv2.FaceDetectorYN_create(
+                YUNET_PATH, "", (320, 320), 0.6, 0.3, 5000)
+
+        rgb = np.array(pil_image.convert("RGB"))
+        h, w = rgb.shape[:2]
+
+        # Detect on a downscaled copy for speed; map coords back
+        scale = 1.0
+        det_img = rgb
+        if max(h, w) > 1024:
+            scale = 1024.0 / max(h, w)
+            det_img = cv2.resize(rgb, (int(w * scale), int(h * scale)))
+
+        bgr = cv2.cvtColor(det_img, cv2.COLOR_RGB2BGR)
+        self._detector.setInputSize((bgr.shape[1], bgr.shape[0]))
+        _, faces = self._detector.detect(bgr)
+        if faces is None or len(faces) == 0:
+            return pil_image  # no face found → analyze the full frame
+
+        # Largest detected face = the main subject
+        best = faces[int(np.argmax(faces[:, 2] * faces[:, 3]))]
+        x, y, fw, fh = [v / scale for v in best[:4]]
+
+        m = 0.35 * max(fw, fh)  # margin, matches portrait-style crops
+        x0 = max(0, int(x - m));  y0 = max(0, int(y - m))
+        x1 = min(w, int(x + fw + m));  y1 = min(h, int(y + fh + m))
+        if x1 <= x0 or y1 <= y0:
+            return pil_image
+        return Image.fromarray(rgb[y0:y1, x0:x1])
+
     # ---- single image (PIL) → probability vector over classes
     def _probs(self, pil_image):
-        x = self.tf(pil_image.convert("RGB")).unsqueeze(0)
+        x = self.tf(self._face_crop(pil_image).convert("RGB")).unsqueeze(0)
         with self.torch.no_grad():
             return self.torch.softmax(self.model(x), dim=1)[0]
 
@@ -139,10 +184,17 @@ class _Engine:
         return prediction, confidence
 
 
+_engine_mtime = None
+
+
 def _get_engine() -> _Engine:
-    global _engine
-    if _engine is None:
+    """Singleton, but reloads automatically if the checkpoint file is
+    replaced (e.g. dropping in a newly trained model — no restart)."""
+    global _engine, _engine_mtime
+    mtime = os.path.getmtime(CKPT_PATH)
+    if _engine is None or _engine_mtime != mtime:
         _engine = _Engine()
+        _engine_mtime = mtime
     return _engine
 
 
