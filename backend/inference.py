@@ -78,9 +78,18 @@ class _Engine:
         norm = ckpt.get("normalize", {"mean": [0.485, 0.456, 0.406],
                                       "std":  [0.229, 0.224, 0.225]})
 
-        model = models.mobilenet_v3_small(weights=None)
+        # Build whichever backbone the checkpoint was trained with
+        arch = ckpt.get("arch", "mobilenet_v3_small")
+        builders = {
+            "mobilenet_v3_small": models.mobilenet_v3_small,
+            "mobilenet_v3_large": models.mobilenet_v3_large,
+        }
+        if arch not in builders:
+            raise ValueError(f"Unsupported arch in checkpoint: {arch}")
+        model = builders[arch](weights=None)
         model.classifier[3] = torch.nn.Linear(
             model.classifier[3].in_features, len(self.classes))
+        self.arch = arch
         model.load_state_dict(ckpt["state_dict"])
         model.eval()
         torch.set_num_threads(max(1, (os.cpu_count() or 2) - 1))  # keep the i3 responsive
@@ -96,8 +105,10 @@ class _Engine:
         self.info = {
             "engine": "live",
             "checkpoint": os.path.basename(CKPT_PATH),
+            "arch": arch,
             "val_accuracy": ckpt.get("val_accuracy"),
             "test_accuracy": ckpt.get("test_accuracy"),
+            "tpdn_accuracy": ckpt.get("tpdn_accuracy"),
             "trained_on": ckpt.get("trained_on"),
         }
 
@@ -146,10 +157,16 @@ class _Engine:
         return Image.fromarray(rgb[y0:y1, x0:x1])
 
     # ---- probability vector over classes (input already face-cropped)
+    # TTA: averages the prediction over the image + its mirror — a small
+    # free accuracy/stability boost for ~2x compute (still <0.2s on CPU).
     def _probs_raw(self, pil_image):
-        x = self.tf(pil_image.convert("RGB")).unsqueeze(0)
+        img = pil_image.convert("RGB")
+        x = self.torch.stack([
+            self.tf(img),
+            self.tf(img.transpose(0)),  # PIL FLIP_LEFT_RIGHT
+        ])
         with self.torch.no_grad():
-            return self.torch.softmax(self.model(x), dim=1)[0]
+            return self.torch.softmax(self.model(x), dim=1).mean(dim=0)
 
     # ---- crop + classify (used by the video path per-frame)
     def _probs(self, pil_image):
