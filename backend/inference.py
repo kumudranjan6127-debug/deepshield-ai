@@ -47,7 +47,11 @@ def torch_available() -> bool:
 
 
 def engine_available() -> bool:
-    """True only when both the ML stack and the trained checkpoint exist."""
+    """True only when both the ML stack and the trained checkpoint exist.
+    DS_ENGINE=echo forces the openly-labeled simulated mode (the UI then
+    shows the yellow 'Simulated (demo)' badge — honest by design)."""
+    if os.environ.get("DS_ENGINE", "").lower() == "echo":
+        return False
     return os.path.exists(CKPT_PATH) and torch_available()
 
 
