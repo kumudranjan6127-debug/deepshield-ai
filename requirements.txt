@@ -1,18 +1,27 @@
 # DeepShield AI — Python dependencies
-# Install:  venv\Scripts\pip install -r requirements.txt
+#
+#   Windows:      venv\Scripts\pip install -r requirements.txt
+#   macOS/Linux:  venv/bin/pip install -r requirements.txt
+#
+# On Linux, plain `torch` pulls the ~2 GB CUDA build. This project is
+# CPU-only, so install those two from the CPU index instead:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# (Windows and macOS wheels on PyPI are already CPU builds.)
 
-# ---- Phase 2: web server (installed) ----
+# ---- Web server ----
 flask>=3.1
 
-# ---- Ensemble verifiers (HuggingFace, images only) ----
-transformers>=5.0
+# ---- AI engine ----
+torch>=2.0
+torchvision>=0.15
+opencv-python>=4.8
+pillow>=10.0
+numpy>=1.24
 
-# ---- Phase 4: AI engine (uncomment when the model lands) ----
-# PyTorch CPU build — install with the CPU index, NOT plain `pip install torch`:
-#   venv\Scripts\pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-# opencv-python
-# pillow
-# numpy
+# ---- Ensemble verifiers (HuggingFace; optional — the app runs without
+#      them, using our own model alone) ----
+transformers>=4.40
 
-# ---- Optional: server-side PDF reports ----
+# ---- Optional: server-side PDF reports (not used yet; the report page
+#      prints to PDF from the browser) ----
 # reportlab
