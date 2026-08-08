@@ -19,14 +19,22 @@ document.addEventListener('DOMContentLoaded', () => {
   bindDownload(scan);
 });
 
-/* ---- Scan resolution: ?id → in-flight session scan → latest history ---- */
+/* ---- Scan resolution: ?id → in-flight session scan → latest history ----
+   History entries drop previewDataUrl/explain when auto-delete is on, so
+   when the requested scan is also the one in this session, merge the two:
+   history for the record, session for the media. */
 function resolveScan() {
+  const current = DS.session.get(DS.KEYS.SCAN);
   const id = new URLSearchParams(window.location.search).get('id');
+
   if (id) {
     const found = DS.history.find(id);
-    if (found) return found;
+    if (found) {
+      return (current && current.id === id) ? { ...current, ...found } : found;
+    }
+    if (current && current.id === id && current.prediction) return current;
   }
-  const current = DS.session.get(DS.KEYS.SCAN);
+
   if (current && current.prediction) return current;
   return DS.history.all()[0] || null;
 }
