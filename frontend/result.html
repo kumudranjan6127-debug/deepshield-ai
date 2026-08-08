@@ -231,6 +231,25 @@
               </div>
             </section>
 
+            <!-- Verdict feedback (evaluation signal, never a training label) -->
+            <section class="card card-pad feedback-card fade-up" data-delay="3"
+                     id="feedback-card" aria-label="Verdict feedback">
+              <div class="feedback-row" id="feedback-ask">
+                <span class="text-sm">Was this verdict correct?</span>
+                <div class="feedback-btns">
+                  <button class="btn btn-ghost btn-sm" id="fb-yes">
+                    <i data-lucide="check" class="icon-sm"></i> Correct
+                  </button>
+                  <button class="btn btn-ghost btn-sm" id="fb-no">
+                    <i data-lucide="x" class="icon-sm"></i> Wrong
+                  </button>
+                </div>
+              </div>
+              <p class="text-xs text-3 feedback-thanks" id="feedback-thanks" hidden>
+                Thanks — recorded. Only the rating is stored, never your media.
+              </p>
+            </section>
+
             <!-- Actions -->
             <section class="result-actions fade-up" data-delay="3" aria-label="Next actions">
               <a class="btn btn-ghost" href="upload-image.html">

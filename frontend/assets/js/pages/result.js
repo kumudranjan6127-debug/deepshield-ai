@@ -31,6 +31,10 @@ document.addEventListener('DOMContentLoaded', () => {
   renderVerdict(scan, isFake, isVideo);
   renderMetrics(scan);
   renderInsights(scan);
+  bindFeedback(scan);
+
+  // Model facts arrive from /api/health — repaint the card when they land
+  document.addEventListener('ds:server-ready', renderModel);
 });
 
 /* ---- Analysis insights: judge votes + Grad-CAM heatmap ---- */
@@ -168,6 +172,45 @@ function renderVerdict(scan, isFake, isVideo) {
     : `No significant manipulation artifacts were detected across the analyzed ${unit} — the model reports ${qual} confidence in this verdict.`;
 
   DS.icons();
+}
+
+/* ---- Verdict feedback ----
+   An evaluation signal: how often the system is right in the wild.
+   Sent to the backend (rating only, no media) and mirrored locally so
+   the dashboard can show it without a server. Never a training label. */
+function bindFeedback(scan) {
+  const ask = document.getElementById('feedback-ask');
+  const thanks = document.getElementById('feedback-thanks');
+
+  const already = DS.store.get('ds_feedback', []).some(f => f.scanId === scan.id);
+  if (already) { ask.hidden = true; thanks.hidden = false; return; }
+
+  const send = agree => {
+    const record = {
+      scanId: scan.id,
+      prediction: scan.prediction,
+      confidence: scan.confidence,
+      fileType: scan.fileType,
+      agree,
+    };
+
+    const local = DS.store.get('ds_feedback', []);
+    local.unshift({ ...record, at: new Date().toISOString() });
+    DS.store.set('ds_feedback', local.slice(0, 200));
+
+    fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record),
+    }).catch(() => { /* offline / frontend-only — the local copy stands */ });
+
+    ask.hidden = true;
+    thanks.hidden = false;
+    DS.toast('Thanks for the feedback', 'success', { duration: 2000 });
+  };
+
+  document.getElementById('fb-yes').addEventListener('click', () => send(true));
+  document.getElementById('fb-no').addEventListener('click', () => send(false));
 }
 
 /* ---- Metrics row ---- */

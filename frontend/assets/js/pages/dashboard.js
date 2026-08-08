@@ -30,7 +30,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* ---- Real engine status from the backend ---- */
   hydrateEngineStatus();
+  renderFeedbackStat();
 });
+
+/* Real-world accuracy as rated by the user (from result-page feedback) */
+function renderFeedbackStat() {
+  const fb = DS.store.get('ds_feedback', []);
+  if (!fb.length) return;
+  const correct = fb.filter(f => f.agree).length;
+  document.getElementById('fb-val').textContent =
+    `${Math.round((correct / fb.length) * 100)}% (${correct}/${fb.length})`;
+  document.getElementById('fb-row').hidden = false;
+}
 
 /* Count-up animation for stat values (respects reduced motion) */
 function animateCount(el, target) {
@@ -89,20 +100,14 @@ async function hydrateEngineStatus() {
   const badge = document.getElementById('engine-badge');
   if (!badge) return;
 
-  try {
-    const res = await fetch('/api/health', { cache: 'no-store' });
-    const health = await res.json();
+  const health = await DS.server.health(); // shared with DS.server.hydrate()
+  if (!health || health.engine !== 'live') return; // keep the honest demo badge
 
-    if (health.engine === 'live') {
-      badge.className = 'badge badge-success';
-      badge.innerHTML = '<span class="badge-dot pulse"></span>Live engine';
+  badge.className = 'badge badge-success';
+  badge.innerHTML = '<span class="badge-dot pulse"></span>Live engine';
 
-      if (health.test_accuracy != null) {
-        document.getElementById('acc-val').textContent = `${health.test_accuracy}%`;
-        document.getElementById('acc-row').hidden = false;
-      }
-    }
-  } catch {
-    /* frontend-only mode (npm run dev / file://) — keep the demo badge */
+  if (health.test_accuracy != null) {
+    document.getElementById('acc-val').textContent = `${health.test_accuracy}%`;
+    document.getElementById('acc-row').hidden = false;
   }
 }

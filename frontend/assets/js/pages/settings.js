@@ -78,13 +78,10 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('DOMContentLoaded', () => {
   const badge = document.getElementById('engine-mode');
   if (!badge) return;
-  fetch('/api/health', { cache: 'no-store' })
-    .then(r => r.json())
-    .then(h => {
-      if (h.engine === 'live') {
-        badge.className = 'badge badge-success';
-        badge.textContent = 'Live — real model';
-      }
-    })
-    .catch(() => { /* backend down — honest default stays */ });
+  DS.server.health().then(h => {   // shared request, no duplicate fetch
+    if (h && h.engine === 'live') {
+      badge.className = 'badge badge-success';
+      badge.textContent = 'Live — real model';
+    }
+  });
 });

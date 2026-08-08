@@ -16,6 +16,7 @@ Open:  http://localhost:5000
 ============================================================
 """
 
+import json
 import os
 import time
 import uuid
@@ -131,6 +132,35 @@ def health():
         "model": MODEL_INFO,
         **inference.engine_info(),
     })
+
+
+FEEDBACK_PATH = os.path.join(BASE_DIR, "data", "feedback.jsonl")
+
+
+@app.post("/api/feedback")
+def feedback():
+    """Record whether the user agreed with a verdict.
+
+    Deliberately stores NO media and no personal data — just the verdict
+    and a thumbs up/down. This is an evaluation signal (how the system
+    performs in the wild), never a training label: nothing here is fed
+    back into the model automatically."""
+    d = request.get_json(silent=True) or {}
+    if not isinstance(d.get("agree"), bool):
+        return jsonify({"error": "agree must be true or false"}), 400
+
+    entry = {
+        "at": datetime.now(timezone.utc).isoformat(),
+        "scanId": str(d.get("scanId", ""))[:40],
+        "prediction": str(d.get("prediction", ""))[:20],
+        "confidence": d.get("confidence"),
+        "fileType": str(d.get("fileType", ""))[:10],
+        "agree": d["agree"],
+    }
+    os.makedirs(os.path.dirname(FEEDBACK_PATH), exist_ok=True)
+    with open(FEEDBACK_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+    return jsonify({"ok": True})
 
 
 ALLOWED_UPLOAD_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".webm", ".mov"}

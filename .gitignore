@@ -5,6 +5,7 @@ __pycache__/
 
 # ---- Runtime data (recreated automatically) ----
 uploads/
+data/          # user feedback log (ratings only, no media)
 
 # ---- Firebase credentials ----
 # Copy frontend/assets/js/firebase-config.example.js -> firebase-config.js

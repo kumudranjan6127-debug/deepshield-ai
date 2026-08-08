@@ -182,6 +182,22 @@
   .insight-heat img { width: 100%; height: auto; max-height: 240px; }
 }
 
+/* ---- Verdict feedback ---- */
+.feedback-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+.feedback-btns { display: flex; gap: var(--s-1); }
+.feedback-thanks { margin: 0; }
+
+@media (max-width: 640px) {
+  .feedback-row { flex-direction: column; align-items: stretch; }
+  .feedback-btns .btn { flex: 1; }
+}
+
 /* ---- Metrics row (3-up stat cards) ---- */
 .metrics-grid {
   display: grid;

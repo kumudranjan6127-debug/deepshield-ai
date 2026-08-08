@@ -100,6 +100,48 @@ DS.sidebar = {
   },
 };
 
+/* ---- Server info: one shared /api/health call per page ----
+   Keeps model facts (name, size, accuracy) truthful across versions —
+   nothing about the model is hardcoded in the pages any more. Pages
+   that need it after load listen for the 'ds:server-ready' event. */
+DS.server = {
+  _promise: null,
+
+  ARCH_INFO: {
+    mobilenet_v3_small: { name: 'MobileNetV3-Small', params: '2.5M' },
+    mobilenet_v3_large: { name: 'MobileNetV3-Large', params: '5.4M' },
+  },
+
+  /* Cached — every caller shares the same request */
+  health() {
+    if (!DS.server._promise) {
+      DS.server._promise = fetch('/api/health', { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : null))
+        .catch(() => null); // frontend-only mode (npm run dev / file://)
+    }
+    return DS.server._promise;
+  },
+
+  async hydrate() {
+    const health = await DS.server.health();
+    if (!health) return; // no backend — static defaults stay
+
+    const info = DS.server.ARCH_INFO[health.arch];
+    if (info) {
+      DS.api.MODEL.name = info.name;
+      DS.api.MODEL.params = info.params;
+    }
+    const acc = health.test_accuracy;
+
+    DS.util.qsa('[data-model-name]').forEach(el => el.textContent = DS.api.MODEL.name);
+    DS.util.qsa('[data-model-params]').forEach(el => el.textContent = DS.api.MODEL.params);
+    DS.util.qsa('[data-model-accuracy]').forEach(el =>
+      el.textContent = acc != null ? `${acc}%` : '—');
+
+    document.dispatchEvent(new CustomEvent('ds:server-ready', { detail: health }));
+  },
+};
+
 /* ---- App-shell hydration (navbar user, logout, footer year) ---- */
 DS.shell = {
   hydrate() {
@@ -129,5 +171,6 @@ document.addEventListener('DOMContentLoaded', () => {
   DS.modal._bind();
   DS.sidebar._bind();
   DS.shell.hydrate();
+  DS.server.hydrate();
   DS.icons();
 });

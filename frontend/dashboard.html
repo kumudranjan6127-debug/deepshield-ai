@@ -228,9 +228,9 @@
             <section class="card card-pad fade-up" data-delay="2" aria-label="AI model status">
               <div class="card-title"><i data-lucide="brain-circuit" class="icon"></i> AI model</div>
               <dl class="meta-list">
-                <div class="meta-row"><dt>Model</dt><dd class="mono">MobileNetV3-Small</dd></div>
+                <div class="meta-row"><dt>Model</dt><dd class="mono" data-model-name>MobileNetV3-Small</dd></div>
                 <div class="meta-row"><dt>Backend</dt><dd>PyTorch</dd></div>
-                <div class="meta-row"><dt>Parameters</dt><dd class="mono">2.5M</dd></div>
+                <div class="meta-row"><dt>Parameters</dt><dd class="mono" data-model-params>2.5M</dd></div>
                 <div class="meta-row"><dt>Input size</dt><dd class="mono">224 × 224</dd></div>
                 <div class="meta-row">
                   <dt>Engine</dt>
@@ -239,6 +239,10 @@
                 <div class="meta-row" id="acc-row" hidden>
                   <dt>Test accuracy</dt>
                   <dd class="mono" id="acc-val">—</dd>
+                </div>
+                <div class="meta-row" id="fb-row" hidden>
+                  <dt>User-rated correct</dt>
+                  <dd class="mono" id="fb-val">—</dd>
                 </div>
               </dl>
             </section>
