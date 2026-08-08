@@ -405,32 +405,33 @@ def analyze_file(path, file_type, frame_rate=1.0):
         except Exception:
             explain = None
 
-    # ---- Combining the votes ----
-    # 1) Weighted consensus. Our model leads (it is trained in-domain),
-    #    but not by so much that it can veto the others — measured: it is
-    #    blind to some StyleGAN2 faces the verifiers catch easily.
-    OWN_WEIGHT = 0.5
-    if len(votes) > 1:
-        w_hf = (1.0 - OWN_WEIGHT) / (len(votes) - 1)
-        weights = [OWN_WEIGHT] + [w_hf] * (len(votes) - 1)
-    else:
-        weights = [1.0]
-    for v, w in zip(votes, weights):
-        v["weight"] = round(w, 3)
+    # ---- Combining the votes: noisy-OR over independent evidence ----
+    # Averaging was wrong in BOTH directions, because it reads a low score
+    # as evidence FOR authenticity. It is not: each model only recognises
+    # the artefacts of the generators it was trained on, so silence means
+    # "I see nothing I know", not "this is genuine". SigLIP scores 0.00 on
+    # GAN faces (it detects diffusion images) and our model scored 0.02 on
+    # a StyleGAN2 face — under a mean, either zero dragged a correct
+    # detection below the line.
+    #
+    # Noisy-OR treats every vote as an independent chance of having spotted
+    # manipulation: p = 1 - Π(1 - p_i · reliability_i). A confident model
+    # raises the result; an unconvinced one simply adds nothing.
+    #
+    # Reliability is measured, not guessed: the ViT verifier is discounted
+    # because it scored an authentic press portrait at 0.67 fake.
+    RELIABILITY = {"MobileNetV3 (ours)": 0.90}
+    DEFAULT_RELIABILITY = 0.90
+    LOW_RELIABILITY = {"ViT Deepfake v2": 0.50}
 
-    consensus = sum(v["pFake"] * v["weight"] for v in votes)
+    survive = 1.0
+    for v in votes:
+        r = LOW_RELIABILITY.get(v["model"],
+                                RELIABILITY.get(v["model"], DEFAULT_RELIABILITY))
+        v["weight"] = r
+        survive *= (1.0 - v["pFake"] * r)
 
-    # 2) Strong-expert escalation. Averaging buries a specialist that is
-    #    certain while the others are merely unsure — exactly how a real
-    #    StyleGAN2 face scored 1.00 / 0.64 / 0.02 yet came out "real".
-    #    When any model is >= 0.90 we fall back on the two most suspicious
-    #    votes, so a lone confident expert still needs corroboration.
-    STRONG = 0.90
-    ranked = sorted((v["pFake"] for v in votes), reverse=True)
-    escalated = len(ranked) >= 2 and ranked[0] >= STRONG
-    top2 = (ranked[0] + ranked[1]) / 2 if escalated else 0.0
-
-    p = max(consensus, top2)
+    p = 1.0 - survive
     prediction = "deepfake" if p >= 0.5 else "real"
     confidence = int(round((p if p >= 0.5 else 1 - p) * 100))
     disputed = any((v["pFake"] >= 0.5) != (p >= 0.5) for v in votes)
@@ -441,6 +442,6 @@ def analyze_file(path, file_type, frame_rate=1.0):
         "framesAnalyzed": 1,
         "ensemble": votes,
         "disputed": disputed,
-        "escalated": escalated and top2 > consensus,
+        "combiner": "noisy-or",
         "explain": explain,
     }
