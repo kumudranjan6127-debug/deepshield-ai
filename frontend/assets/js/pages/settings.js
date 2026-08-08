@@ -72,6 +72,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('clear-confirm').addEventListener('click', () => {
     DS.history.clear();
+    // The in-flight scan is part of "your scans" too — leaving it behind
+    // made the report page keep showing the last analysis after a clear.
+    DS.session.remove(DS.KEYS.SCAN);
     renderHistoryCount();
     DS.modal.close('clear-modal');
     DS.toast('Scan history cleared', 'success');

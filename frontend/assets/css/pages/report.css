@@ -105,6 +105,37 @@
   color: var(--text-2);
 }
 
+/* ---- All reports list ---- */
+#report-list-card { max-width: 820px; margin: 0 auto var(--s-3); }
+.report-count { margin-left: auto; }
+
+.report-list { display: flex; flex-direction: column; }
+
+.report-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: 12px var(--s-1);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  transition: background var(--t-fast) var(--ease), padding-left var(--t-fast) var(--ease);
+}
+.report-row:last-child { border-bottom: none; }
+.report-row:hover { background: rgba(148, 163, 184, 0.06); padding-left: 12px; }
+.report-row.active { background: var(--primary-tint); padding-left: 12px; }
+
+.report-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.report-row-name {
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.report-row-meta { color: var(--text-3); }
+
 /* ---- Analyzed media (photo + heatmap) ---- */
 .doc-media {
   display: flex;
@@ -207,6 +238,9 @@
   .doc-header { border-bottom-color: #ddd; }
   .report-doc .meta-row { border-bottom-color: #ddd; }
   .doc-disclaimer { border-top-color: #ddd; }
+
+  /* The list is navigation, not part of the printed document */
+  #report-list-card { display: none !important; }
 
   /* Analyzed media prints compact, never split across pages */
   #media-section { break-inside: avoid; }

@@ -13,11 +13,37 @@ document.addEventListener('DOMContentLoaded', () => {
     DS.util.formatDate(new Date().toISOString());
 
   const scan = resolveScan();
+  renderList(scan);              // every past report stays reachable
   if (!scan) { showEmpty(); return; }
 
   renderReport(scan);
   bindDownload(scan);
 });
+
+/* ---- All reports: one row per scan in history, newest first ---- */
+function renderList(current) {
+  const history = DS.history.all();
+  if (!history.length) return;
+
+  document.getElementById('report-count').textContent = history.length;
+  document.getElementById('report-list').innerHTML = history.map(s => {
+    const isFake = s.prediction === 'deepfake';
+    const active = current && s.id === current.id ? ' active' : '';
+    return `
+      <a class="report-row${active}" href="report.html?id=${encodeURIComponent(s.id)}">
+        <span class="report-row-main">
+          <span class="report-row-name">${DS.util.escapeHtml(DS.util.truncate(s.fileName || '—', 34))}</span>
+          <span class="report-row-meta text-xs">${DS.util.formatDate(s.completedAt)}</span>
+        </span>
+        <span class="badge ${isFake ? 'badge-danger' : 'badge-success'}">
+          ${isFake ? 'Deepfake' : 'Real'} · <span class="mono">${s.confidence}%</span>
+        </span>
+      </a>`;
+  }).join('');
+
+  document.getElementById('report-list-card').hidden = false;
+  DS.icons();
+}
 
 /* ---- Scan resolution: ?id → in-flight session scan → latest history ----
    History entries drop previewDataUrl/explain when auto-delete is on, so

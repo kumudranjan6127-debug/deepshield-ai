@@ -130,6 +130,16 @@
           </div>
         </div>
 
+        <!-- All reports — every scan in history, newest first -->
+        <section class="card card-pad fade-up" id="report-list-card"
+                 aria-label="All reports" hidden>
+          <div class="card-title">
+            <i data-lucide="history" class="icon"></i> All reports
+            <span class="badge report-count mono" id="report-count">0</span>
+          </div>
+          <div class="report-list" id="report-list"><!-- rows injected by report.js --></div>
+        </section>
+
         <!-- Empty state (shown when no scan can be resolved) -->
         <section class="card fade-up" id="report-empty" hidden aria-label="No reports">
           <div class="empty-state">
