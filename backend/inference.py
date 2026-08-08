@@ -109,6 +109,7 @@ class _Engine:
             "val_accuracy": ckpt.get("val_accuracy"),
             "test_accuracy": ckpt.get("test_accuracy"),
             "tpdn_accuracy": ckpt.get("tpdn_accuracy"),
+            "dfdc_accuracy": ckpt.get("dfdc_accuracy"),
             "trained_on": ckpt.get("trained_on"),
         }
 
