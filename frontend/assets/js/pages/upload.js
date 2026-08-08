@@ -78,6 +78,8 @@
       urlForm: q('#url-form'),         // video page only
       urlField: q('#url-field'),
       urlInput: q('#url-input'),
+      urlHint: q('#url-hint'),         // streaming-platform guidance
+      urlHintName: q('#url-hint-name'),
     };
   }
 
@@ -311,12 +313,25 @@
 
     els.urlForm.addEventListener('submit', e => {
       e.preventDefault();
-      const parsed = parseVideoUrl(els.urlInput.value.trim());
+      const raw = els.urlInput.value.trim();
+
+      // Streaming pages serve players, not files — and their re-encoding
+      // destroys the artefacts detection depends on. Say so, and offer
+      // the screen-recording route instead of a bare "invalid link".
+      const platform = streamingPlatform(raw);
+      if (platform) {
+        showUrlHint(platform);
+        return;
+      }
+
+      const parsed = parseVideoUrl(raw);
       if (!parsed) {
         els.urlField.classList.add('invalid');
+        hideUrlHint();
         DS.toast('Enter a direct http(s) link ending in .mp4', 'error');
         return;
       }
+      hideUrlHint();
       const scan = {
         id: DS.util.uid(),
         fileName: parsed.fileName,
@@ -330,6 +345,43 @@
       DS.session.set(DS.KEYS.SCAN, scan);
       window.location.href = 'processing.html';
     });
+  }
+
+  /* Streaming platforms we recognise, so the hint can name them. */
+  const PLATFORMS = [
+    { name: 'YouTube',   hosts: ['youtube.com', 'youtu.be', 'youtube-nocookie.com'] },
+    { name: 'Instagram', hosts: ['instagram.com', 'instagr.am'] },
+    { name: 'Facebook',  hosts: ['facebook.com', 'fb.watch'] },
+    { name: 'TikTok',    hosts: ['tiktok.com'] },
+    { name: 'X (Twitter)', hosts: ['twitter.com', 'x.com'] },
+    { name: 'Reddit',    hosts: ['reddit.com', 'redd.it'] },
+    { name: 'Vimeo',     hosts: ['vimeo.com'] },
+    { name: 'Dailymotion', hosts: ['dailymotion.com', 'dai.ly'] },
+    { name: 'Snapchat',  hosts: ['snapchat.com'] },
+    { name: 'Telegram',  hosts: ['t.me', 'telegram.me'] },
+  ];
+
+  /** → platform name when the URL points at a streaming page, else null. */
+  function streamingPlatform(raw) {
+    if (!raw) return null;
+    let host;
+    try {
+      host = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw)
+        .hostname.toLowerCase().replace(/^www\./, '');
+    } catch { return null; }
+    const hit = PLATFORMS.find(p => p.hosts.some(h => host === h || host.endsWith('.' + h)));
+    return hit ? hit.name : null;
+  }
+
+  function showUrlHint(platform) {
+    els.urlField.classList.remove('invalid');
+    els.urlHintName.textContent = platform;
+    els.urlHint.hidden = false;
+    DS.icons();
+  }
+
+  function hideUrlHint() {
+    if (els.urlHint) els.urlHint.hidden = true;
   }
 
   /** Accepts http(s) URLs whose path ends in .mp4 (query strings OK). */

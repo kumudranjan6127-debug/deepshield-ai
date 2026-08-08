@@ -129,6 +129,39 @@
 }
 
 /* Match the input's rendered height (11px padding + 1.6 line-height) */
+/* Streaming-platform guidance (YouTube, Instagram, …) */
+.url-hint {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: var(--s-2);
+  margin-bottom: var(--s-2);
+  border-radius: var(--r-md);
+  background: var(--primary-tint);
+  border: 1px solid rgba(59, 130, 246, 0.28);
+}
+.url-hint > .icon { color: var(--accent); flex-shrink: 0; margin-top: 1px; }
+.url-hint-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.url-hint p { line-height: 1.6; }
+.url-hint-steps { margin-top: 8px; }
+.url-hint kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 1px;
+  border-radius: 5px;
+  background: rgba(148, 163, 184, 0.14);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+}
+
 .url-row .btn { padding-block: 15px; }
 
 /* ============ RESPONSIVE ============ */

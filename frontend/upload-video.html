@@ -220,8 +220,27 @@
             </button>
           </form>
 
+          <!-- Shown when a streaming-platform link is pasted -->
+          <div class="url-hint" id="url-hint" hidden>
+            <i data-lucide="info" class="icon"></i>
+            <div>
+              <p class="url-hint-title"><span id="url-hint-name">This platform</span> links can’t be analyzed directly</p>
+              <p class="text-xs text-2">
+                Streaming pages serve a player, not a video file — and their re-encoding
+                strips out the very artifacts detection relies on, so any verdict would be
+                unreliable.
+              </p>
+              <p class="text-xs text-2 url-hint-steps">
+                <strong>Record it instead:</strong> play the video full-screen, press
+                <kbd>Win</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> to start and stop recording,
+                then upload the clip from <span class="mono">Videos\Captures</span>.
+                On a Mac use <kbd>Shift</kbd>+<kbd>Cmd</kbd>+<kbd>5</kbd>.
+              </p>
+            </div>
+          </div>
+
           <p class="text-xs text-3">
-            Direct MP4 links only — YouTube, Instagram and other streaming pages are not supported.
+            Direct MP4 links only — streaming pages like YouTube or Instagram are not supported.
           </p>
         </section>
 
