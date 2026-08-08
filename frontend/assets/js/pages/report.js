@@ -95,6 +95,12 @@ function renderReport(scan) {
   /* 2b. Analyzed media — photo + Grad-CAM heatmap (when available) */
   const photo = scan.previewDataUrl || null;
   const heat = (scan.explain && scan.explain.heatmapDataUrl) || null;
+
+  // No media: say why rather than silently dropping the section
+  if (!photo && !heat && DS.settings.get().autoDelete) {
+    document.getElementById('media-note').hidden = false;
+  }
+
   if (photo || heat) {
     document.getElementById('media-section').hidden = false;
     if (photo) {

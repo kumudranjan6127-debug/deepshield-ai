@@ -77,21 +77,49 @@
     body.scrollTop = body.scrollHeight;
   }
 
+  /* Shrink a preview to an archive-sized thumbnail (~10KB) so fifty of
+     them still fit in localStorage. Resolves null on any failure. */
+  function compactThumb(dataUrl, max = 220, quality = 0.6) {
+    return new Promise(resolve => {
+      if (!dataUrl) { resolve(null); return; }
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, max / img.width);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch { resolve(null); }
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+  }
+
   /* ---- Completion ---- */
 
   function finish(merged, ui) {
     DS.session.set(DS.KEYS.SCAN, merged);
 
-    // History: honor the auto-delete privacy setting — keep the media
-    // thumbnail and heatmap out of durable storage (privacy + the ~5MB
-    // localStorage quota). The session copy keeps everything for the
-    // result/report pages.
+    // History: honour the auto-delete privacy setting.
+    //  ON  → no media is kept, so older reports show no image (by design)
+    //  OFF → keep a compact thumbnail so past reports stay complete;
+    //        full-size previews would blow the ~5MB localStorage quota
+    //        at 50 entries, and a silent quota failure loses the scan.
     const entry = { ...merged };
     if (DS.settings.get().autoDelete) {
       delete entry.previewDataUrl;
       delete entry.explain;
+      DS.history.add(entry);
+    } else {
+      compactThumb(merged.previewDataUrl).then(small => {
+        if (small) entry.previewDataUrl = small;
+        else delete entry.previewDataUrl;
+        DS.history.add(entry);
+      });
     }
-    DS.history.add(entry);
 
     // Success state: progress 100%, all stages done, ring → check
     ui.pct.textContent = '100%';

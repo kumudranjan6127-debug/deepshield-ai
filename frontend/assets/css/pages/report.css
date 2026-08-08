@@ -161,6 +161,22 @@
   text-align: center;
 }
 
+/* Explains an absent media section instead of leaving a silent gap */
+.doc-media-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px var(--s-2);
+  margin-bottom: var(--s-4);
+  border-radius: var(--r-md);
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  line-height: 1.6;
+}
+.doc-media-note .icon-sm { color: var(--accent); margin-top: 2px; flex-shrink: 0; }
+.doc-media-note strong { color: var(--text-2); font-weight: 600; }
+
 /* ---- 7. Disclaimer ---- */
 .doc-disclaimer {
   padding-top: var(--s-3);
@@ -239,8 +255,9 @@
   .report-doc .meta-row { border-bottom-color: #ddd; }
   .doc-disclaimer { border-top-color: #ddd; }
 
-  /* The list is navigation, not part of the printed document */
-  #report-list-card { display: none !important; }
+  /* Navigation and app-only hints are not part of the printed document */
+  #report-list-card,
+  .doc-media-note { display: none !important; }
 
   /* Analyzed media prints compact, never split across pages */
   #media-section { break-inside: avoid; }
