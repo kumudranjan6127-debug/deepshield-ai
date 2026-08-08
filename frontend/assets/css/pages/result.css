@@ -190,8 +190,17 @@
   gap: var(--s-2);
   flex-wrap: wrap;
 }
-.feedback-btns { display: flex; gap: var(--s-1); }
+.feedback-btns { display: flex; align-items: center; gap: var(--s-1); }
 .feedback-thanks { margin: 0; }
+
+/* Quiet third option — visible, but never competing with the real answers */
+.btn-skip {
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.btn-skip:hover { color: var(--text-2); background: rgba(148, 163, 184, 0.08); }
 
 @media (max-width: 640px) {
   .feedback-row { flex-direction: column; align-items: stretch; }

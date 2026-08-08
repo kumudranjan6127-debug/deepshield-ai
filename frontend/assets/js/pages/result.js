@@ -182,8 +182,22 @@ function bindFeedback(scan) {
   const ask = document.getElementById('feedback-ask');
   const thanks = document.getElementById('feedback-thanks');
 
-  const already = DS.store.get('ds_feedback', []).some(f => f.scanId === scan.id);
-  if (already) { ask.hidden = true; thanks.hidden = false; return; }
+  const card = document.getElementById('feedback-card');
+
+  /* Answered or skipped before → don't ask again */
+  const prior = DS.store.get('ds_feedback', []).find(f => f.scanId === scan.id);
+  if (prior) {
+    if (prior.skipped) card.hidden = true;
+    else { ask.hidden = true; thanks.hidden = false; }
+    return;
+  }
+
+  /* Remember the outcome locally; `skipped` entries are excluded from stats */
+  const remember = entry => {
+    const local = DS.store.get('ds_feedback', []);
+    local.unshift({ ...entry, scanId: scan.id, at: new Date().toISOString() });
+    DS.store.set('ds_feedback', local.slice(0, 200));
+  };
 
   const send = agree => {
     const record = {
@@ -193,10 +207,7 @@ function bindFeedback(scan) {
       fileType: scan.fileType,
       agree,
     };
-
-    const local = DS.store.get('ds_feedback', []);
-    local.unshift({ ...record, at: new Date().toISOString() });
-    DS.store.set('ds_feedback', local.slice(0, 200));
+    remember(record);
 
     fetch('/api/feedback', {
       method: 'POST',
@@ -211,6 +222,13 @@ function bindFeedback(scan) {
 
   document.getElementById('fb-yes').addEventListener('click', () => send(true));
   document.getElementById('fb-no').addEventListener('click', () => send(false));
+
+  /* Skip: nothing is sent or scored — "I don't know" is a valid answer
+     and guessing would pollute the accuracy signal. */
+  document.getElementById('fb-skip').addEventListener('click', () => {
+    remember({ skipped: true });
+    card.hidden = true;
+  });
 }
 
 /* ---- Metrics row ---- */

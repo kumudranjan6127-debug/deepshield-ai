@@ -35,7 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Real-world accuracy as rated by the user (from result-page feedback) */
 function renderFeedbackStat() {
-  const fb = DS.store.get('ds_feedback', []);
+  // Skipped ("not sure") entries carry no verdict — they must not count
+  const fb = DS.store.get('ds_feedback', []).filter(f => typeof f.agree === 'boolean');
   if (!fb.length) return;
   const correct = fb.filter(f => f.agree).length;
   document.getElementById('fb-val').textContent =
