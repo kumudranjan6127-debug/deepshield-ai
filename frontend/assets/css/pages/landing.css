@@ -26,6 +26,19 @@ html.js .reveal[data-delay='1'] { transition-delay: 90ms; }
 html.js .reveal[data-delay='2'] { transition-delay: 180ms; }
 html.js .reveal[data-delay='3'] { transition-delay: 270ms; }
 
+/* ---- Reading progress ---- */
+.lp-progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--primary), var(--accent), #A78BFA);
+  z-index: 80;
+  will-change: transform;
+}
+
 /* ============ NAV ============ */
 .lp-nav {
   position: sticky;
@@ -54,11 +67,27 @@ html.js .reveal[data-delay='3'] { transition-delay: 270ms; }
 
 .lp-links { display: flex; align-items: center; gap: var(--s-3); }
 .lp-links a {
+  position: relative;
   font-size: 14px;
   font-weight: 500;
   color: var(--text-2);
+  padding-bottom: 3px;
 }
 .lp-links a:hover { color: var(--text); }
+/* Underline grows from the centre; the scrollspy adds .current */
+.lp-links a::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2px;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  transform: scaleX(0);
+  transition: transform var(--t-med) var(--ease);
+}
+.lp-links a:hover::after,
+.lp-links a.current::after { transform: scaleX(1); }
+.lp-links a.current { color: var(--text); }
 
 .lp-nav-cta { display: flex; align-items: center; gap: var(--s-1); }
 .lp-burger { display: none; }
@@ -139,11 +168,19 @@ html.js .reveal[data-delay='3'] { transition-delay: 270ms; }
 
 .mock-card {
   position: relative;
-  background: linear-gradient(180deg, var(--card-raised), var(--card));
-  border: 1px solid var(--border-strong);
+  background: var(--glass-sheen), linear-gradient(180deg, var(--card-raised), var(--card));
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), var(--glass-inset);
   overflow: hidden;
+  /* JS writes --rx/--ry from the pointer for a subtle 3D tilt */
+  transform: perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform 260ms var(--ease);
+  will-change: transform;
+}
+html[data-fx='full'] .mock-card {
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  backdrop-filter: blur(14px) saturate(135%);
 }
 .mock-head {
   display: flex;
@@ -177,14 +214,41 @@ html.js .reveal[data-delay='3'] { transition-delay: 270ms; }
 }
 .mock-ring-value {
   fill: none;
-  stroke: var(--danger);
+  stroke: var(--accent);
   stroke-width: 9;
   stroke-linecap: round;
   stroke-dasharray: 327;          /* 2πr, r = 52 */
-  stroke-dashoffset: 327;
-  animation: mockRing 1.6s var(--ease) 0.4s forwards;
+  stroke-dashoffset: 327;         /* driven live by landing.js */
+  transition: stroke-dashoffset 260ms linear, stroke var(--t-med) var(--ease);
 }
-@keyframes mockRing { to { stroke-dashoffset: 20; } }
+.mock-ring-value.fake { stroke: var(--danger); }
+.mock-ring-value.real { stroke: var(--success); }
+
+/* Sweeping scan line while the demo "analyzes" */
+.mock-scan {
+  position: absolute;
+  left: 8%; right: 8%;
+  top: 50%;
+  height: 2px;
+  border-radius: var(--r-full);
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.9;
+  animation: mockScan 1.5s var(--ease) infinite;
+}
+.mock-scan.done { display: none; }
+@keyframes mockScan {
+  0%, 100% { transform: translateY(-46px); }
+  50%      { transform: translateY(46px); }
+}
+
+.mock-file {
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 5px 10px;
+  border-radius: var(--r-full);
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid var(--border);
+}
 
 .mock-ring-center {
   position: absolute;
@@ -215,6 +279,7 @@ html.js .reveal[data-delay='3'] { transition-delay: 270ms; }
   width: var(--w);
   border-radius: var(--r-full);
   background: linear-gradient(90deg, var(--primary), var(--accent));
+  transition: width 700ms var(--ease);
 }
 
 /* Floating chips */
@@ -435,11 +500,77 @@ html.js .reveal[data-delay='3'] { transition-delay: 270ms; }
   padding: var(--s-3);
   box-shadow: var(--shadow-md);
 }
-.ex-pair { display: flex; gap: var(--s-2); justify-content: center; }
-.ex-pair figure { display: flex; flex-direction: column; gap: 8px; align-items: center; }
-.ex-pair figcaption { font-size: 11px; color: var(--text-3); }
-.ex-thumb { width: 118px; height: 118px; border-radius: var(--r-md); }
-.ex-note { margin-top: var(--s-2); text-align: center; color: var(--text-2); }
+/* ---- Drag-to-compare (photo ⇄ attention) ---- */
+.ex-compare {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1;
+  margin-inline: auto;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  --split: 52%;
+}
+.ex-layer { position: absolute; inset: 0; }
+.ex-layer .heat-face { width: 100%; height: 100%; }
+/* Right side shows the heat layer; the split is a CSS variable */
+.ex-heat { clip-path: inset(0 0 0 var(--split)); }
+.ex-heat .heat-blob {
+  left: 26%; top: 22%;
+  width: 48%; height: 34%;
+}
+
+.ex-handle {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: var(--split);
+  width: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.6);
+  pointer-events: none;
+}
+.ex-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 30px; height: 30px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--r-full);
+  background: var(--card-raised);
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow-md);
+}
+
+.ex-slider-label {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+/* The range input is the (invisible) accessible control over the image */
+.ex-slider {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: ew-resize;
+}
+.ex-slider:focus-visible + .ex-handle { outline: 2px solid var(--border-focus); }
+
+.ex-note {
+  margin-top: var(--s-2);
+  text-align: center;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.ex-note .icon-sm { color: var(--accent); }
 
 /* ---- Pipeline ---- */
 .lp-pipeline {
@@ -458,12 +589,25 @@ html.js .reveal[data-delay='3'] { transition-delay: 270ms; }
   min-width: 116px;
   padding: var(--s-2);
   border-radius: var(--r-md);
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: var(--glass-sheen), var(--card);
+  border: 1px solid var(--glass-border);
   font-size: 12px;
   color: var(--text-2);
   text-align: center;
+  transition: transform var(--t-med) var(--ease), border-color var(--t-med) var(--ease),
+              box-shadow var(--t-med) var(--ease);
 }
+.pipe-node:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-focus);
+  box-shadow: var(--glow-primary);
+}
+/* Signal travelling through the pipeline (JS toggles .lit in sequence) */
+.pipe-node.lit {
+  border-color: rgba(96, 165, 250, 0.55);
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.25), 0 8px 26px rgba(59, 130, 246, 0.18);
+}
+.pipe-node.lit .icon { color: var(--accent); }
 .pipe-node .icon { color: var(--text-3); }
 .pipe-node em { color: var(--text-3); font-style: normal; font-size: 11px; }
 .pipe-node.accent { border-color: rgba(59,130,246,0.4); background: var(--primary-tint); }

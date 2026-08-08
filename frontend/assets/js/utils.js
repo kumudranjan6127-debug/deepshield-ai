@@ -120,6 +120,7 @@ DS.SETTINGS_DEFAULTS = {
   threshold: 60,       // confidence threshold (%)
   reducedMotion: false,
   autoDelete: true,    // remove uploads after analysis
+  effects: 'auto',     // 'auto' | 'full' (glass blur) | 'lite'
 };
 DS.settings = {
   get() { return { ...DS.SETTINGS_DEFAULTS, ...DS.store.get(DS.KEYS.SETTINGS, {}) }; },
@@ -130,7 +131,12 @@ DS.settings = {
     return next;
   },
   apply(s = DS.settings.get()) {
-    document.documentElement.dataset.reducedMotion = s.reducedMotion ? 'true' : 'false';
+    const root = document.documentElement;
+    root.dataset.reducedMotion = s.reducedMotion ? 'true' : 'false';
+
+    // 'auto' is resolved pre-paint in boot.js — only override on an
+    // explicit choice, so we never fight that decision on load.
+    if (s.effects === 'full' || s.effects === 'lite') root.dataset.fx = s.effects;
   },
 };
 

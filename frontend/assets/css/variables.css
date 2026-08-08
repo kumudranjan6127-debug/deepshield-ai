@@ -77,7 +77,14 @@
   --navbar-h:    64px;
   --content-max: 1200px;
 
-  /* ---- Glass ---- */
-  --glass-bg:   rgba(11, 18, 33, 0.72);
-  --glass-blur: saturate(140%) blur(14px);
+  /* ---- Glass ----
+     Two tiers, switched by html[data-fx] (set pre-paint in boot.js):
+     'full' adds real backdrop-filter; 'lite' keeps the same look with
+     layered gradients only — no per-frame blur cost on weak GPUs. */
+  --glass-bg:      rgba(11, 18, 33, 0.72);
+  --glass-blur:    saturate(140%) blur(14px);
+  --glass-sheen:   linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012));
+  --glass-border:  rgba(255, 255, 255, 0.085);
+  --glass-inset:   inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --glass-glare:   rgba(96, 165, 250, 0.10);
 }

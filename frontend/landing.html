@@ -19,6 +19,9 @@
 </head>
 <body data-page="landing">
 
+<!-- Reading progress — fills as the page scrolls -->
+<div class="lp-progress" id="lp-progress" aria-hidden="true"></div>
+
 <!-- ================= NAV ================= -->
 <header class="lp-nav" id="lp-nav">
   <div class="lp-container lp-nav-inner">
@@ -97,27 +100,31 @@
           <span class="mock-title mono">deepshield · result</span>
         </div>
 
-        <div class="mock-body">
+        <!-- Live demo: this mockup actually runs the analysis loop -->
+        <div class="mock-body" id="mock-body">
           <div class="mock-ring">
             <svg viewBox="0 0 120 120">
               <circle cx="60" cy="60" r="52" class="mock-ring-track"/>
-              <circle cx="60" cy="60" r="52" class="mock-ring-value"/>
+              <circle cx="60" cy="60" r="52" class="mock-ring-value" id="mock-ring-value"/>
             </svg>
             <div class="mock-ring-center">
-              <span class="mono mock-pct">94%</span>
-              <span class="mock-cap">confidence</span>
+              <span class="mono mock-pct" id="mock-pct">0%</span>
+              <span class="mock-cap" id="mock-cap">analyzing</span>
             </div>
+            <span class="mock-scan" id="mock-scan"></span>
           </div>
 
-          <span class="badge badge-danger mock-verdict">
-            <i data-lucide="alert-triangle" class="icon-sm"></i> Likely Deepfake
+          <span class="badge mock-verdict" id="mock-verdict">
+            <span class="loader" style="width:13px;height:13px;border-width:2px"></span> Working…
           </span>
 
-          <div class="mock-votes">
-            <div class="mock-vote"><span>MobileNetV3 (ours)</span><i style="--w: 91%"></i></div>
-            <div class="mock-vote"><span>ViT verifier</span><i style="--w: 78%"></i></div>
-            <div class="mock-vote"><span>SigLIP detector</span><i style="--w: 99%"></i></div>
+          <div class="mock-votes" id="mock-votes">
+            <div class="mock-vote"><span>MobileNetV3 (ours)</span><i style="--w: 0%"></i></div>
+            <div class="mock-vote"><span>ViT verifier</span><i style="--w: 0%"></i></div>
+            <div class="mock-vote"><span>SigLIP detector</span><i style="--w: 0%"></i></div>
           </div>
+
+          <div class="mock-file mono" id="mock-file">profile_photo.jpg</div>
         </div>
       </div>
 
@@ -281,9 +288,9 @@
 <!-- ================= NUMBERS ================= -->
 <section class="lp-band">
   <div class="lp-container lp-band-grid">
-    <div class="reveal"><span class="lp-stat mono">99.4%</span><span class="lp-stat-cap">accuracy on 20,000 unseen test images</span></div>
-    <div class="reveal" data-delay="1"><span class="lp-stat mono">98.5%</span><span class="lp-stat-cap">still correct on compressed, re-saved images</span></div>
-    <div class="reveal" data-delay="2"><span class="lp-stat mono">100k</span><span class="lp-stat-cap">faces used to train our own model</span></div>
+    <div class="reveal"><span class="lp-stat mono" data-count="99.4" data-suffix="%">0%</span><span class="lp-stat-cap">accuracy on 20,000 unseen test images</span></div>
+    <div class="reveal" data-delay="1"><span class="lp-stat mono" data-count="98.5" data-suffix="%">0%</span><span class="lp-stat-cap">still correct on compressed, re-saved images</span></div>
+    <div class="reveal" data-delay="2"><span class="lp-stat mono" data-count="100" data-suffix="k">0k</span><span class="lp-stat-cap">faces used to train our own model</span></div>
     <div class="reveal" data-delay="3"><span class="lp-stat mono">&lt;1s</span><span class="lp-stat-cap">per photo on an ordinary CPU</span></div>
   </div>
 </section>
@@ -307,30 +314,33 @@
       </ul>
     </div>
 
-    <div class="lp-explain-visual reveal" data-delay="1" aria-hidden="true">
+    <!-- Drag-to-compare: photo on the left, model attention on the right -->
+    <div class="lp-explain-visual reveal" data-delay="1">
       <div class="ex-card">
-        <div class="ex-pair">
-          <figure>
-            <div class="ex-thumb">
-              <svg viewBox="0 0 64 64" class="heat-face">
-                <circle cx="32" cy="25" r="14" fill="rgba(148,163,184,0.32)"/>
-                <path d="M9 60c2-12 11-18 23-18s21 6 23 18z" fill="rgba(148,163,184,0.25)"/>
-              </svg>
-            </div>
-            <figcaption>Submitted</figcaption>
-          </figure>
-          <figure>
-            <div class="ex-thumb">
-              <svg viewBox="0 0 64 64" class="heat-face">
-                <circle cx="32" cy="25" r="14" fill="rgba(148,163,184,0.32)"/>
-                <path d="M9 60c2-12 11-18 23-18s21 6 23 18z" fill="rgba(148,163,184,0.25)"/>
-              </svg>
-              <span class="heat-blob big"></span>
-            </div>
-            <figcaption>Model attention</figcaption>
-          </figure>
+        <div class="ex-compare" id="ex-compare">
+          <div class="ex-layer ex-base" aria-hidden="true">
+            <svg viewBox="0 0 64 64" class="heat-face">
+              <circle cx="32" cy="25" r="14" fill="rgba(148,163,184,0.32)"/>
+              <path d="M9 60c2-12 11-18 23-18s21 6 23 18z" fill="rgba(148,163,184,0.25)"/>
+            </svg>
+          </div>
+          <div class="ex-layer ex-heat" id="ex-heat" aria-hidden="true">
+            <svg viewBox="0 0 64 64" class="heat-face">
+              <circle cx="32" cy="25" r="14" fill="rgba(148,163,184,0.32)"/>
+              <path d="M9 60c2-12 11-18 23-18s21 6 23 18z" fill="rgba(148,163,184,0.25)"/>
+            </svg>
+            <span class="heat-blob big"></span>
+          </div>
+          <span class="ex-handle" id="ex-handle" aria-hidden="true"></span>
+
+          <label class="ex-slider-label" for="ex-slider">Reveal model attention</label>
+          <input type="range" class="ex-slider" id="ex-slider" min="0" max="100" value="52"
+                 aria-label="Reveal model attention">
         </div>
-        <p class="ex-note text-xs">Attention concentrated around the eye region.</p>
+        <p class="ex-note text-xs">
+          <i data-lucide="scan-face" class="icon-sm"></i>
+          Drag — attention concentrated around the eye region.
+        </p>
       </div>
     </div>
   </div>

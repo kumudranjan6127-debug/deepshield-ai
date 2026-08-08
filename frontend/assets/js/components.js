@@ -100,6 +100,35 @@ DS.sidebar = {
   },
 };
 
+/* ---- Cursor glare on cards ----
+   One delegated pointermove, rAF-throttled, hover-devices only. Adds the
+   .glare class lazily so touch devices and reduced-motion users pay
+   nothing at all. */
+DS.glare = {
+  _bind() {
+    const fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    const reduced = document.documentElement.dataset.reducedMotion === 'true'
+      || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!fine || reduced) return;
+
+    let queued = null;
+    document.addEventListener('pointermove', e => {
+      const card = e.target.closest('.card, .stat-card');
+      if (!card) return;
+      queued = { card, x: e.clientX, y: e.clientY };
+      if (queued.raf) return;
+      queued.raf = requestAnimationFrame(() => {
+        const { card: c, x, y } = queued;
+        const r = c.getBoundingClientRect();
+        c.classList.add('glare');
+        c.style.setProperty('--mx', `${((x - r.left) / r.width) * 100}%`);
+        c.style.setProperty('--my', `${((y - r.top) / r.height) * 100}%`);
+        queued.raf = null;
+      });
+    }, { passive: true });
+  },
+};
+
 /* ---- Server info: one shared /api/health call per page ----
    Keeps model facts (name, size, accuracy) truthful across versions —
    nothing about the model is hardcoded in the pages any more. Pages
@@ -172,5 +201,6 @@ document.addEventListener('DOMContentLoaded', () => {
   DS.sidebar._bind();
   DS.shell.hydrate();
   DS.server.hydrate();
+  DS.glare._bind();
   DS.icons();
 });

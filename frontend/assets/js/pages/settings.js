@@ -45,6 +45,15 @@ document.addEventListener('DOMContentLoaded', () => {
     save({ threshold: parseInt(threshold.value, 10) });
   });
 
+  /* Visual effects: 'auto' needs a reload so boot.js can re-decide before
+     the first paint; explicit choices apply instantly via settings.apply. */
+  const effects = document.getElementById('effects');
+  effects.value = s.effects || 'auto';
+  effects.addEventListener('change', () => {
+    save({ effects: effects.value });
+    if (effects.value === 'auto') window.location.reload();
+  });
+
   reducedMotion.addEventListener('change', () => {
     save({ reducedMotion: reducedMotion.checked });
   });
