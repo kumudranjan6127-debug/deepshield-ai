@@ -275,7 +275,8 @@
 
     // Live engine: a File object can't survive page navigation, so stage
     // it on the server now; processing.html analyzes it via uploadId.
-    if (DS.api.MODE === 'live') {
+    // Without a backend we skip this and the mock engine takes over.
+    if (await DS.api.resolveMode() === 'live') {
       const originalLabel = els.startBtn.innerHTML;
       els.startBtn.disabled = true;
       els.removeBtn.disabled = true;

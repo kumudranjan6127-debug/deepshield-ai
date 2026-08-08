@@ -9,8 +9,19 @@
    ============================================================ */
 
 DS.api = {
-  MODE: 'live',                 // 'live' (Flask + real model) | 'simulated' (JS mock)
+  // 'auto'  — use the Flask engine when it answers, else the JS mock
+  // 'live' / 'simulated' — force one (handy for testing)
+  MODE: 'auto',
   ENDPOINT: '/api/analyze',     // Flask route (live mode)
+
+  /* Resolves 'auto' once per page via the shared /api/health call, so a
+     static deployment (GitHub Pages, file://) still demonstrates the whole
+     flow — the UI already labels that state "Simulated (demo)". */
+  async resolveMode() {
+    if (DS.api.MODE !== 'auto') return DS.api.MODE;
+    const health = await DS.server.health();
+    return health && health.engine === 'live' ? 'live' : 'simulated';
+  },
 
   MODEL: {
     name: 'MobileNetV3-Small',
@@ -29,9 +40,11 @@ DS.api = {
    *   {prediction:'real'|'deepfake', confidence, riskLevel, processingTime,
    *    framesAnalyzed, model, device, completedAt}
    */
-  analyze(scan, hooks = {}) {
-    if (DS.api.MODE === 'live') return DS.api._analyzeLive(scan, hooks);
-    return DS.api._analyzeSimulated(scan, hooks);
+  async analyze(scan, hooks = {}) {
+    const mode = await DS.api.resolveMode();
+    return mode === 'live'
+      ? DS.api._analyzeLive(scan, hooks)
+      : DS.api._analyzeSimulated(scan, hooks);
   },
 
   /* ---------- live (Flask + real MobileNetV3) ----------

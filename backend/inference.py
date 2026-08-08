@@ -134,14 +134,22 @@ class _Engine:
                 YUNET_PATH, "", (320, 320), 0.6, 0.3, 5000)
 
         rgb = np.array(pil_image.convert("RGB"))
+
+        # Cap the working resolution. Cropping straight out of a very large
+        # photo hands the model a downsampling path it never saw in training
+        # (dataset faces are ~256px): a 2687px press portrait scored 0.94
+        # fake, the same photo at 1024px scored 0.02. Normalising the scale
+        # first removes that artefact.
+        MAX_SIDE = 1024
+        if max(rgb.shape[:2]) > MAX_SIDE:
+            s = MAX_SIDE / max(rgb.shape[:2])
+            rgb = cv2.resize(rgb, (int(rgb.shape[1] * s), int(rgb.shape[0] * s)),
+                             interpolation=cv2.INTER_AREA)
         h, w = rgb.shape[:2]
 
-        # Detect on a downscaled copy for speed; map coords back
+        # Detection runs on the (already capped) image
         scale = 1.0
         det_img = rgb
-        if max(h, w) > 1024:
-            scale = 1024.0 / max(h, w)
-            det_img = cv2.resize(rgb, (int(w * scale), int(h * scale)))
 
         bgr = cv2.cvtColor(det_img, cv2.COLOR_RGB2BGR)
         self._detector.setInputSize((bgr.shape[1], bgr.shape[0]))
@@ -174,13 +182,32 @@ class _Engine:
     # TTA: averages the prediction over the image + its mirror — a small
     # free accuracy/stability boost for ~2x compute (still <0.2s on CPU).
     def _probs_raw(self, pil_image):
-        img = pil_image.convert("RGB")
+        img = self._normalize_compression(pil_image.convert("RGB"))
         x = self.torch.stack([
             self.tf(img),
             self.tf(img.transpose(0)),  # PIL FLIP_LEFT_RIGHT
         ])
         with self.torch.no_grad():
             return self.torch.softmax(self.model(x), dim=1).mean(dim=0)
+
+    @staticmethod
+    def _normalize_compression(img, quality=88):
+        """Put every input in the same compression domain the model trained
+        on. Training saw JPEG-recompressed faces (q30-95); a pristine
+        camera original carries high-frequency detail it never learned as
+        'normal' and scored 0.95 fake, while the same photo re-saved as
+        JPEG scored 0.02. One round-trip removes that mismatch.
+        Applied to our model only — the verifiers do their own thing, and
+        SigLIP in particular reacts badly to re-encoding."""
+        import io
+        from PIL import Image
+        try:
+            buf = io.BytesIO()
+            img.save(buf, "JPEG", quality=quality)
+            buf.seek(0)
+            return Image.open(buf).convert("RGB")
+        except Exception:
+            return img
 
     # ---- crop + classify (used by the video path per-frame)
     def _probs(self, pil_image):
@@ -405,33 +432,30 @@ def analyze_file(path, file_type, frame_rate=1.0):
         except Exception:
             explain = None
 
-    # ---- Combining the votes: noisy-OR over independent evidence ----
-    # Averaging was wrong in BOTH directions, because it reads a low score
-    # as evidence FOR authenticity. It is not: each model only recognises
-    # the artefacts of the generators it was trained on, so silence means
-    # "I see nothing I know", not "this is genuine". SigLIP scores 0.00 on
-    # GAN faces (it detects diffusion images) and our model scored 0.02 on
-    # a StyleGAN2 face — under a mean, either zero dragged a correct
-    # detection below the line.
-    #
-    # Noisy-OR treats every vote as an independent chance of having spotted
-    # manipulation: p = 1 - Π(1 - p_i · reliability_i). A confident model
-    # raises the result; an unconvinced one simply adds nothing.
-    #
-    # Reliability is measured, not guessed: the ViT verifier is discounted
-    # because it scored an authentic press portrait at 0.67 fake.
-    RELIABILITY = {"MobileNetV3 (ours)": 0.90}
-    DEFAULT_RELIABILITY = 0.90
-    LOW_RELIABILITY = {"ViT Deepfake v2": 0.50}
+    # ---- Combining the votes ----
+    # Our own model leads. Noisy-OR made sense while it was blind to
+    # StyleGAN2, but that blindness is gone (V3 trains on those fakes) and
+    # trusting any confident vote backfires: SigLIP scores a re-saved
+    # authentic photo at 1.00 — it recognises processing, not manipulation.
+    # A false "fake" on someone's real photo is the worst outcome we can
+    # produce, so verifiers now advise rather than decide.
+    OWN_WEIGHT = 0.75
+    if len(votes) > 1:
+        w_hf = (1.0 - OWN_WEIGHT) / (len(votes) - 1)
+        weights = [OWN_WEIGHT] + [w_hf] * (len(votes) - 1)
+    else:
+        weights = [1.0]
+    for v, w in zip(votes, weights):
+        v["weight"] = round(w, 3)
 
-    survive = 1.0
-    for v in votes:
-        r = LOW_RELIABILITY.get(v["model"],
-                                RELIABILITY.get(v["model"], DEFAULT_RELIABILITY))
-        v["weight"] = r
-        survive *= (1.0 - v["pFake"] * r)
+    p = sum(v["pFake"] * v["weight"] for v in votes)
 
-    p = 1.0 - survive
+    # Verifiers can still overrule, but only together and only when both
+    # are near-certain — one biased verifier is never enough.
+    verifiers = [v["pFake"] for v in votes[1:]]
+    if verifiers and all(x >= 0.85 for x in verifiers):
+        p = max(p, sum(verifiers) / len(verifiers))
+
     prediction = "deepfake" if p >= 0.5 else "real"
     confidence = int(round((p if p >= 0.5 else 1 - p) * 100))
     disputed = any((v["pFake"] >= 0.5) != (p >= 0.5) for v in votes)
@@ -442,6 +466,6 @@ def analyze_file(path, file_type, frame_rate=1.0):
         "framesAnalyzed": 1,
         "ensemble": votes,
         "disputed": disputed,
-        "combiner": "noisy-or",
+        "combiner": "own-led + verifier consensus",
         "explain": explain,
     }
