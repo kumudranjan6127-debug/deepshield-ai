@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="DeepShield AI — check if a photo or video is a deepfake. Runs on your own machine, no cloud, results in seconds.">
+  <title>DeepShield AI — Is that face real?</title>
+
+  <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+  <link rel="preload" href="assets/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/space-grotesk-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/jetbrains-mono-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/fonts.css">
+  <link rel="stylesheet" href="assets/css/variables.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/pages/landing.css">
+</head>
+<body data-page="landing">
+
+<!-- ================= NAV ================= -->
+<header class="lp-nav" id="lp-nav">
+  <div class="lp-container lp-nav-inner">
+    <a class="lp-brand" href="landing.html" aria-label="DeepShield AI home">
+      <span class="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M16 5.5l8 3v7c0 5.2-3.4 9.3-8 11-4.6-1.7-8-5.8-8-11v-7l8-3z"
+                stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"
+                fill="rgba(59,130,246,0.14)"/>
+          <path d="M11.5 16h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="16" cy="16" r="1.6" fill="currentColor"/>
+        </svg>
+      </span>
+      <span class="logo-name">DeepShield</span>
+    </a>
+
+    <nav class="lp-links" id="lp-links" aria-label="Sections">
+      <a href="#problem">Why it matters</a>
+      <a href="#how">How it works</a>
+      <a href="#tech">Technology</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+
+    <div class="lp-nav-cta">
+      <a class="btn btn-primary btn-sm" href="index.html">
+        Open the app <i data-lucide="arrow-right" class="icon-sm"></i>
+      </a>
+      <button class="btn-icon lp-burger" id="lp-burger" aria-label="Toggle menu">
+        <i data-lucide="menu" class="icon"></i>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ================= HERO ================= -->
+<section class="lp-hero">
+  <div class="lp-container lp-hero-grid">
+
+    <div class="lp-hero-copy reveal">
+      <span class="badge badge-info lp-eyebrow">
+        <i data-lucide="sparkles" class="icon-sm"></i> Runs on your laptop · No cloud
+      </span>
+
+      <h1 class="lp-h1">That photo looks real.<br><span class="lp-grad">But is it?</span></h1>
+
+      <p class="lp-lead">
+        AI can now generate a human face in under a second — and those faces are
+        running fake profiles, fake proofs and fake news right now.
+        DeepShield checks any photo or video and tells you, with a confidence
+        score and a heatmap showing exactly where it looked.
+      </p>
+
+      <div class="lp-hero-cta">
+        <a class="btn btn-primary btn-lg" href="index.html">
+          <i data-lucide="scan-line" class="icon-sm"></i> Check a photo — free
+        </a>
+        <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
+      </div>
+
+      <ul class="lp-trust" role="list">
+        <li><i data-lucide="badge-check" class="icon-sm"></i> <strong class="mono">99.4%</strong> test accuracy</li>
+        <li><i data-lucide="cpu" class="icon-sm"></i> Works on an <strong>i3 laptop</strong></li>
+        <li><i data-lucide="lock" class="icon-sm"></i> Photos <strong>never leave</strong> your device</li>
+      </ul>
+    </div>
+
+    <!-- Product mockup: the actual result screen, drawn in HTML/CSS -->
+    <div class="lp-hero-visual reveal" data-delay="1" aria-hidden="true">
+      <div class="mock-glow"></div>
+
+      <div class="mock-card">
+        <div class="mock-head">
+          <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
+          <span class="mock-title mono">deepshield · result</span>
+        </div>
+
+        <div class="mock-body">
+          <div class="mock-ring">
+            <svg viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="52" class="mock-ring-track"/>
+              <circle cx="60" cy="60" r="52" class="mock-ring-value"/>
+            </svg>
+            <div class="mock-ring-center">
+              <span class="mono mock-pct">94%</span>
+              <span class="mock-cap">confidence</span>
+            </div>
+          </div>
+
+          <span class="badge badge-danger mock-verdict">
+            <i data-lucide="alert-triangle" class="icon-sm"></i> Likely Deepfake
+          </span>
+
+          <div class="mock-votes">
+            <div class="mock-vote"><span>MobileNetV3 (ours)</span><i style="--w: 91%"></i></div>
+            <div class="mock-vote"><span>ViT verifier</span><i style="--w: 78%"></i></div>
+            <div class="mock-vote"><span>SigLIP detector</span><i style="--w: 99%"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Floating heatmap chip -->
+      <div class="mock-float mock-heat">
+        <div class="heat-thumb">
+          <svg viewBox="0 0 64 64" class="heat-face">
+            <circle cx="32" cy="26" r="15" fill="rgba(148,163,184,0.35)"/>
+            <path d="M8 60c2-13 12-19 24-19s22 6 24 19z" fill="rgba(148,163,184,0.28)"/>
+          </svg>
+          <span class="heat-blob"></span>
+        </div>
+        <span class="text-xs">Attention: eye region</span>
+      </div>
+
+      <div class="mock-float mock-speed">
+        <i data-lucide="zap" class="icon-sm"></i>
+        <span class="text-xs">Verdict in <strong class="mono">0.4s</strong></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PROBLEM (relatable) ================= -->
+<section class="lp-section" id="problem">
+  <div class="lp-container">
+    <div class="lp-section-head reveal">
+      <span class="eyebrow">Why it matters</span>
+      <h2 class="lp-h2">You have already seen a fake today</h2>
+      <p class="lp-sub">You just could not tell. These are the four ways it usually reaches people.</p>
+    </div>
+
+    <div class="lp-cards">
+      <article class="lp-card reveal">
+        <div class="lp-card-art art-chat" aria-hidden="true">
+          <span class="bubble b1"></span>
+          <span class="bubble b2"></span>
+          <span class="bubble b3 warn"><i data-lucide="alert-triangle" class="icon-sm"></i></span>
+        </div>
+        <h3>The forwarded photo</h3>
+        <p>A shocking image lands in the family group at midnight. By morning it is on four
+          more groups. Nobody checked — because checking felt impossible.</p>
+      </article>
+
+      <article class="lp-card reveal" data-delay="1">
+        <div class="lp-card-art art-profile" aria-hidden="true">
+          <svg viewBox="0 0 120 90">
+            <rect x="10" y="14" width="100" height="62" rx="10" fill="rgba(148,163,184,0.10)" stroke="rgba(148,163,184,0.22)"/>
+            <circle cx="38" cy="40" r="13" fill="rgba(59,130,246,0.35)"/>
+            <rect x="58" y="32" width="40" height="6" rx="3" fill="rgba(148,163,184,0.35)"/>
+            <rect x="58" y="45" width="26" height="6" rx="3" fill="rgba(148,163,184,0.22)"/>
+            <circle cx="38" cy="40" r="19" fill="none" stroke="var(--danger)" stroke-width="2" stroke-dasharray="4 4"/>
+          </svg>
+        </div>
+        <h3>The profile that does not exist</h3>
+        <p>A friendly face, a normal job, a few photos. The person was generated by a model
+          minutes before the account was created.</p>
+      </article>
+
+      <article class="lp-card reveal" data-delay="2">
+        <div class="lp-card-art art-call" aria-hidden="true">
+          <svg viewBox="0 0 120 90">
+            <rect x="18" y="12" width="84" height="60" rx="8" fill="rgba(148,163,184,0.10)" stroke="rgba(148,163,184,0.22)"/>
+            <circle cx="60" cy="36" r="12" fill="rgba(148,163,184,0.30)"/>
+            <path d="M42 62c2-8 8-12 18-12s16 4 18 12z" fill="rgba(148,163,184,0.22)"/>
+            <g class="glitch">
+              <rect x="30" y="30" width="60" height="3" fill="rgba(239,68,68,0.55)"/>
+              <rect x="34" y="44" width="46" height="3" fill="rgba(239,68,68,0.35)"/>
+            </g>
+          </svg>
+        </div>
+        <h3>The video call from "family"</h3>
+        <p>Same face, same voice, urgent money request. Deepfake video calls have already
+          cost people their savings.</p>
+      </article>
+
+      <article class="lp-card reveal" data-delay="3">
+        <div class="lp-card-art art-doc" aria-hidden="true">
+          <svg viewBox="0 0 120 90">
+            <rect x="30" y="8" width="60" height="74" rx="6" fill="rgba(148,163,184,0.10)" stroke="rgba(148,163,184,0.22)"/>
+            <circle cx="60" cy="30" r="11" fill="rgba(59,130,246,0.30)"/>
+            <rect x="42" y="48" width="36" height="5" rx="2.5" fill="rgba(148,163,184,0.30)"/>
+            <rect x="42" y="58" width="26" height="5" rx="2.5" fill="rgba(148,163,184,0.20)"/>
+            <path d="M78 66l8 8m0-8l-8 8" stroke="var(--danger)" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h3>The "verified" document</h3>
+        <p>Fake IDs, fake matrimonial photos, fake job offers — all now come with a
+          face that passes a casual glance.</p>
+      </article>
+    </div>
+
+    <p class="lp-note reveal">
+      <i data-lucide="info" class="icon-sm"></i>
+      The problem is not that people are careless. It is that until now, checking took an expert.
+    </p>
+  </div>
+</section>
+
+<!-- ================= HOW IT WORKS ================= -->
+<section class="lp-section lp-alt" id="how">
+  <div class="lp-container">
+    <div class="lp-section-head reveal">
+      <span class="eyebrow">How it works</span>
+      <h2 class="lp-h2">Three steps. About four seconds.</h2>
+      <p class="lp-sub">No sign-up wall, no upload to someone else's server.</p>
+    </div>
+
+    <div class="lp-steps">
+      <article class="lp-step reveal">
+        <span class="lp-step-num mono">01</span>
+        <div class="lp-step-art" aria-hidden="true">
+          <svg viewBox="0 0 140 100">
+            <rect x="18" y="20" width="104" height="64" rx="12" fill="none"
+                  stroke="rgba(59,130,246,0.45)" stroke-width="2" stroke-dasharray="7 6"/>
+            <path d="M70 62V38m0 0l-11 11m11-11l11 11" stroke="var(--accent)" stroke-width="3"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="52" y="66" width="36" height="5" rx="2.5" fill="rgba(96,165,250,0.35)"/>
+          </svg>
+        </div>
+        <h3>Drop the photo or video</h3>
+        <p>Drag it in, browse, or paste a direct video link. JPG, PNG, WebP, MP4 — up to 100 MB.</p>
+      </article>
+
+      <article class="lp-step reveal" data-delay="1">
+        <span class="lp-step-num mono">02</span>
+        <div class="lp-step-art" aria-hidden="true">
+          <svg viewBox="0 0 140 100">
+            <circle cx="70" cy="50" r="30" fill="rgba(59,130,246,0.08)" stroke="rgba(59,130,246,0.35)"/>
+            <circle cx="60" cy="44" r="3.5" fill="var(--accent)"/>
+            <circle cx="80" cy="44" r="3.5" fill="var(--accent)"/>
+            <path d="M60 62c4 4 16 4 20 0" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+            <rect x="34" y="47" width="72" height="3" rx="1.5" fill="var(--accent)" class="scanbar"/>
+            <path d="M34 26h-8v-8M106 26h8v-8M34 74h-8v8M106 74h8v8"
+                  stroke="rgba(96,165,250,0.6)" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h3>Four AI models inspect it</h3>
+        <p>The face is found and cropped, then scored by our own trained model plus two
+          independent verifiers. Videos are sampled frame by frame.</p>
+      </article>
+
+      <article class="lp-step reveal" data-delay="2">
+        <span class="lp-step-num mono">03</span>
+        <div class="lp-step-art" aria-hidden="true">
+          <svg viewBox="0 0 140 100">
+            <path d="M70 16l26 10v22c0 17-11 30-26 35-15-5-26-18-26-35V26l26-10z"
+                  fill="rgba(34,197,94,0.12)" stroke="var(--success)" stroke-width="2.5" stroke-linejoin="round"/>
+            <path d="M58 52l9 9 17-18" stroke="var(--success)" stroke-width="3.5"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h3>Get a verdict you can check</h3>
+        <p>Real or deepfake, a confidence score, a risk level, a heatmap of where the model
+          looked — and a PDF report you can share.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ================= NUMBERS ================= -->
+<section class="lp-band">
+  <div class="lp-container lp-band-grid">
+    <div class="reveal"><span class="lp-stat mono">99.4%</span><span class="lp-stat-cap">accuracy on 20,000 unseen test images</span></div>
+    <div class="reveal" data-delay="1"><span class="lp-stat mono">98.5%</span><span class="lp-stat-cap">still correct on compressed, re-saved images</span></div>
+    <div class="reveal" data-delay="2"><span class="lp-stat mono">100k</span><span class="lp-stat-cap">faces used to train our own model</span></div>
+    <div class="reveal" data-delay="3"><span class="lp-stat mono">&lt;1s</span><span class="lp-stat-cap">per photo on an ordinary CPU</span></div>
+  </div>
+</section>
+
+<!-- ================= EXPLAINABILITY ================= -->
+<section class="lp-section" id="explain">
+  <div class="lp-container lp-split">
+    <div class="reveal">
+      <span class="eyebrow">Explainable by design</span>
+      <h2 class="lp-h2">It shows its work</h2>
+      <p class="lp-sub lp-sub-left">
+        Most detectors hand you a number and expect trust. DeepShield shows the heatmap
+        of what the model actually focused on, and how each of the three models voted —
+        including when they disagree.
+      </p>
+      <ul class="lp-list" role="list">
+        <li><i data-lucide="check" class="icon-sm"></i> Grad-CAM attention map over the analyzed face</li>
+        <li><i data-lucide="check" class="icon-sm"></i> Per-model confidence, side by side</li>
+        <li><i data-lucide="check" class="icon-sm"></i> An honest "models disagreed" flag</li>
+        <li><i data-lucide="check" class="icon-sm"></i> Everything included in the PDF report</li>
+      </ul>
+    </div>
+
+    <div class="lp-explain-visual reveal" data-delay="1" aria-hidden="true">
+      <div class="ex-card">
+        <div class="ex-pair">
+          <figure>
+            <div class="ex-thumb">
+              <svg viewBox="0 0 64 64" class="heat-face">
+                <circle cx="32" cy="25" r="14" fill="rgba(148,163,184,0.32)"/>
+                <path d="M9 60c2-12 11-18 23-18s21 6 23 18z" fill="rgba(148,163,184,0.25)"/>
+              </svg>
+            </div>
+            <figcaption>Submitted</figcaption>
+          </figure>
+          <figure>
+            <div class="ex-thumb">
+              <svg viewBox="0 0 64 64" class="heat-face">
+                <circle cx="32" cy="25" r="14" fill="rgba(148,163,184,0.32)"/>
+                <path d="M9 60c2-12 11-18 23-18s21 6 23 18z" fill="rgba(148,163,184,0.25)"/>
+              </svg>
+              <span class="heat-blob big"></span>
+            </div>
+            <figcaption>Model attention</figcaption>
+          </figure>
+        </div>
+        <p class="ex-note text-xs">Attention concentrated around the eye region.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TECH ================= -->
+<section class="lp-section lp-alt" id="tech">
+  <div class="lp-container">
+    <div class="lp-section-head reveal">
+      <span class="eyebrow">Under the hood</span>
+      <h2 class="lp-h2">Four models, one answer</h2>
+      <p class="lp-sub">A fast specialist we trained ourselves, checked by two independent experts.</p>
+    </div>
+
+    <div class="lp-pipeline reveal" aria-hidden="true">
+      <div class="pipe-node"><i data-lucide="image" class="icon"></i><span>Your photo</span></div>
+      <span class="pipe-arrow"></span>
+      <div class="pipe-node"><i data-lucide="scan-face" class="icon"></i><span>Face detected<br><em>YuNet</em></span></div>
+      <span class="pipe-arrow"></span>
+      <div class="pipe-fan">
+        <div class="pipe-node accent"><i data-lucide="brain-circuit" class="icon"></i><span>Our model<br><em>MobileNetV3</em></span></div>
+        <div class="pipe-node"><i data-lucide="badge-check" class="icon"></i><span>Verifier<br><em>ViT</em></span></div>
+        <div class="pipe-node"><i data-lucide="sparkles" class="icon"></i><span>Verifier<br><em>SigLIP</em></span></div>
+      </div>
+      <span class="pipe-arrow"></span>
+      <div class="pipe-node success"><i data-lucide="shield-check" class="icon"></i><span>Verdict<br><em>+ confidence</em></span></div>
+    </div>
+
+    <div class="lp-tech-grid">
+      <article class="lp-tech reveal">
+        <i data-lucide="brain-circuit" class="icon-lg"></i>
+        <h3>Trained, not downloaded</h3>
+        <p>We fine-tuned MobileNetV3 on 100,000 real and AI-generated faces, with
+          augmentation that stops it from memorising shortcuts.</p>
+      </article>
+      <article class="lp-tech reveal" data-delay="1">
+        <i data-lucide="badge-check" class="icon-lg"></i>
+        <h3>Ensemble of experts</h3>
+        <p>Two pretrained verifiers vote alongside it — one tuned for deepfake faces,
+          one for diffusion-generated images.</p>
+      </article>
+      <article class="lp-tech reveal" data-delay="2">
+        <i data-lucide="cpu" class="icon-lg"></i>
+        <h3>CPU-only, on purpose</h3>
+        <p>No GPU, no server bill, no queue. It runs on the laptop you already own.</p>
+      </article>
+      <article class="lp-tech reveal" data-delay="3">
+        <i data-lucide="film" class="icon-lg"></i>
+        <h3>Video, frame by frame</h3>
+        <p>Videos are sampled one frame per second and scored individually, then combined
+          into a single verdict.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PRIVACY ================= -->
+<section class="lp-section">
+  <div class="lp-container">
+    <div class="lp-privacy reveal">
+      <div class="lp-privacy-icon" aria-hidden="true"><i data-lucide="lock" class="icon-xl"></i></div>
+      <div>
+        <h2 class="lp-h2">Your photos stay yours</h2>
+        <p class="lp-sub lp-sub-left">
+          Analysis happens on your own machine. Uploaded files are deleted the moment the
+          verdict is ready, nothing is sent to a third-party API, and there is no tracking.
+          Face photos are personal — we treat them that way.
+        </p>
+        <div class="lp-privacy-chips">
+          <span class="badge"><i data-lucide="hard-drive" class="icon-sm"></i> Processed locally</span>
+          <span class="badge"><i data-lucide="trash-2" class="icon-sm"></i> Auto-deleted after analysis</span>
+          <span class="badge"><i data-lucide="database" class="icon-sm"></i> No cloud storage</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FAQ ================= -->
+<section class="lp-section lp-alt" id="faq">
+  <div class="lp-container lp-faq-wrap">
+    <div class="lp-section-head reveal">
+      <span class="eyebrow">Straight answers</span>
+      <h2 class="lp-h2">Questions people actually ask</h2>
+    </div>
+
+    <div class="lp-faq reveal">
+      <details>
+        <summary>Is it always right?<i data-lucide="chevron-right" class="icon-sm"></i></summary>
+        <p>No, and anyone claiming otherwise is selling something. On our test set it is
+          right 99.4% of the time, but images that have been screenshotted, heavily
+          compressed or made by a brand-new generator are harder. That is why every result
+          comes with a confidence score instead of a bare yes or no.</p>
+      </details>
+      <details>
+        <summary>What kind of fakes does it catch best?<i data-lucide="chevron-right" class="icon-sm"></i></summary>
+        <p>Fully AI-generated faces — the kind behind fake profiles. Face-swap videos are a
+          different technique and are the next thing on our roadmap.</p>
+      </details>
+      <details>
+        <summary>Do I need a powerful computer?<i data-lucide="chevron-right" class="icon-sm"></i></summary>
+        <p>No. It was built and tested on an Intel i3 with 8 GB RAM, CPU only. A photo takes
+          well under a second once the models are loaded.</p>
+      </details>
+      <details>
+        <summary>Does my photo get uploaded anywhere?<i data-lucide="chevron-right" class="icon-sm"></i></summary>
+        <p>No. Processing happens on the machine running DeepShield, and the file is deleted
+          as soon as the analysis finishes.</p>
+      </details>
+      <details>
+        <summary>Can I use the result as proof?<i data-lucide="chevron-right" class="icon-sm"></i></summary>
+        <p>Treat it as a strong signal, not as forensic evidence. Use it to decide whether
+          something deserves a closer look — and verify important claims through more than
+          one source.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FINAL CTA ================= -->
+<section class="lp-cta">
+  <div class="lp-container reveal">
+    <h2 class="lp-h1 lp-cta-h">Next time, don't guess.</h2>
+    <p class="lp-lead lp-cta-p">Check it in four seconds. It's free, it's local, and it explains itself.</p>
+    <a class="btn btn-primary btn-lg" href="index.html">
+      <i data-lucide="scan-line" class="icon-sm"></i> Open DeepShield
+    </a>
+    <p class="text-xs text-3 lp-cta-note">No account needed — there's a guest mode.</p>
+  </div>
+</section>
+
+</main>
+
+<!-- ================= FOOTER ================= -->
+<footer class="lp-footer">
+  <div class="lp-container lp-footer-inner">
+    <div>
+      <a class="lp-brand" href="landing.html">
+        <span class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 5.5l8 3v7c0 5.2-3.4 9.3-8 11-4.6-1.7-8-5.8-8-11v-7l8-3z"
+                  stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"
+                  fill="rgba(59,130,246,0.14)"/>
+            <path d="M11.5 16h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="16" cy="16" r="1.6" fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="logo-name">DeepShield</span>
+      </a>
+      <p class="text-xs text-3 lp-footer-note">
+        Deepfake detection that runs where your photos already are.
+      </p>
+    </div>
+
+    <nav class="lp-footer-links" aria-label="Footer">
+      <a href="index.html">Open the app</a>
+      <a href="about.html">About</a>
+      <a href="#how">How it works</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </div>
+  <div class="lp-container lp-footer-base">
+    <span class="text-xs text-3">© <span data-year>2026</span> DeepShield AI</span>
+    <span class="text-xs text-3 mono">v1.0.0 · CPU · MobileNetV3</span>
+  </div>
+</footer>
+
+<script src="assets/js/vendor/lucide-lite.min.js" defer></script>
+<script src="assets/js/utils.js" defer></script>
+<script src="assets/js/api.js" defer></script>
+<script src="assets/js/components.js" defer></script>
+<script src="assets/js/pages/landing.js" defer></script>
+</body>
+</html>

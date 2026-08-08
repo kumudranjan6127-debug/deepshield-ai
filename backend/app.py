@@ -49,7 +49,7 @@ MODEL_INFO = {
 
 @app.route("/")
 def home():
-    return send_from_directory(FRONTEND_DIR, "index.html")
+    return send_from_directory(FRONTEND_DIR, "landing.html")
 
 
 @app.route("/<path:path>")
