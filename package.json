@@ -1,11 +1,14 @@
 {
   "name": "deepshield-ai",
   "version": "1.0.0",
-  "description": "DeepShield AI — lightweight deepfake detection frontend (HTML/CSS/vanilla JS)",
+  "description": "DeepShield AI — lightweight deepfake detection (Flask + MobileNetV3, CPU-only)",
   "private": true,
   "scripts": {
-    "dev": "node serve.js",
-    "start": "node serve.js",
-    "backend": "venv\\Scripts\\python backend/app.py"
+    "start": "node scripts/ds.js start",
+    "stop": "node scripts/ds.js stop",
+    "restart": "node scripts/ds.js restart",
+    "status": "node scripts/ds.js status",
+    "backend": "venv\\Scripts\\python backend/app.py",
+    "dev": "node serve.js"
   }
 }

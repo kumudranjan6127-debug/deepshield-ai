@@ -258,5 +258,10 @@ def analyze():
 
 
 if __name__ == "__main__":
-    print("DeepShield AI backend running at http://localhost:5000")
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    # Debug off by default: its reloader runs a second process that
+    # respawns the first, which is how a dozen instances once piled up.
+    # Set DS_DEBUG=1 while editing backend code.
+    debug = os.environ.get("DS_DEBUG") == "1"
+    print(f"DeepShield AI backend running at http://localhost:{port}")
+    app.run(host="127.0.0.1", port=port, debug=debug)

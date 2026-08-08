@@ -16,3 +16,6 @@ frontend/assets/js/firebase-config.js
 Thumbs.db
 .DS_Store
 *.log
+
+# ---- Server log (regenerated) ----
+backend.log
