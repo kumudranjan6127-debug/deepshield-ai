@@ -333,7 +333,11 @@ def analyze():
             prediction = result["prediction"]
             confidence = result["confidence"]
             frames = result["framesAnalyzed"]
-            extras = {k: result.get(k) for k in ("ensemble", "disputed", "explain")}
+            # Optional blocks the engine may produce. `video` is present for
+            # video scans only; the others for images only. Keys the engine
+            # did not emit are dropped rather than sent as null.
+            extras = {k: result[k] for k in
+                      ("ensemble", "disputed", "explain", "video") if k in result}
         else:
             # No model, or a metadata-only request: the labelled demo engine
             prediction, confidence, frames = echo_verdict(file_name, file_size, file_type)

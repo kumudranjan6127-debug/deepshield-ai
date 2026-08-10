@@ -15,6 +15,11 @@ data/
 # and fill your own keys. Without it the app runs in demo-login mode.
 frontend/assets/js/firebase-config.js
 
+# ---- Regression clip built on demand when video_test/ is empty ----
+# The two committed clips are fixtures and stay tracked; only the
+# generated fallback is ignored.
+training/video_test/generated_faces.mp4
+
 # ---- Evaluation datasets (large, licensed, reproducible from README) ----
 eval_data/*
 !eval_data/README.md

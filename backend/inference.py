@@ -75,6 +75,137 @@ def certainty_for(confidence: int) -> str:
     return CFG.CERTAINTY_BANDS[-1][1]
 
 
+def aggregate_frames(p_fakes, weights=None, topk_fraction=None,
+                     suspicious_at=None) -> dict:
+    """Turn per-frame P(fake) into one score, and show the working.
+
+    Pure: a list of floats in, a dict out, no model and no I/O — which is
+    why `scripts/video_test.py` can pin its behaviour against sequences
+    whose right answer is obvious by construction.
+
+    Three summaries, because each one is blind to a different thing:
+
+        median  survives a handful of bad frames untouched
+        mean    notices when the whole clip is slightly off
+        top-k   finds manipulation confined to a few seconds, using k
+                frames rather than one so a single outlier cannot decide
+
+    Weights come from config and are provisional; every component is
+    returned so the combination can be recomputed from the response alone.
+    """
+    import statistics
+
+    ps = [float(p) for p in p_fakes]
+    if not ps:
+        raise ValueError("no frame scores to aggregate")
+
+    w = dict(weights or CFG.VIDEO_WEIGHTS)
+    fraction = CFG.VIDEO_TOPK_FRACTION if topk_fraction is None else topk_fraction
+    threshold = CFG.VIDEO_SUSPICIOUS_AT if suspicious_at is None else suspicious_at
+
+    k = max(1, round(fraction * len(ps)))
+    top = sorted(ps, reverse=True)[:k]
+
+    parts = {"median": statistics.median(ps),
+             "mean": sum(ps) / len(ps),
+             "top_k": sum(top) / len(top)}
+
+    total = sum(w.values()) or 1.0
+    score = sum(parts[name] * weight for name, weight in w.items()) / total
+
+    suspicious = [p for p in ps if p >= threshold]
+    return {
+        "score": score,
+        "components": {n: round(v, 4) for n, v in parts.items()},
+        "weights": dict(w),
+        "k": k,
+        "frames": len(ps),
+        "suspicious": len(suspicious),
+        "suspiciousAt": threshold,
+        "peak": max(ps),
+        "lowest": min(ps),
+        "variance": statistics.pvariance(ps) if len(ps) > 1 else 0.0,
+    }
+
+
+def timestamp(seconds) -> str:
+    """Seconds → "MM:SS", so a suspicious frame can be scrubbed to."""
+    total = max(0, int(round(float(seconds))))
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def temporal_signals(records) -> dict:
+    """Frame-to-frame consistency of the face itself.
+
+    **Descriptive only. Nothing here votes on the verdict**, and that is a
+    decision rather than an oversight: no labelled video set has been
+    scored, so there is no evidence for what value of "landmark jitter"
+    means manipulation. A signal nobody has validated must not be allowed
+    to change an answer — it can only describe one.
+
+    Cheap by design. Every number below comes from the face box, the five
+    YuNet landmarks and a 32x32 thumbnail that were already computed to
+    classify the frame, so this costs no extra forward passes and no extra
+    detection. That is the whole reason it is not a video transformer.
+
+    → each value is None when too few frames carried a face to measure it.
+    """
+    import numpy as np
+
+    faces = [r for r in records if r.get("box")]
+    out = {"facesFound": len(faces), "framesSampled": len(records)}
+
+    if len(faces) < 2:
+        return {**out, "facePositionJitter": None, "faceSizeJitter": None,
+                "landmarkJitter": None, "appearanceContinuity": None}
+
+    # Position: where the face sits, as a fraction of the frame. A steady
+    # head gives a small number; a face that jumps between frames does not.
+    cx = np.array([(r["box"][0] + r["box"][2] / 2) / r["frame"][0] for r in faces])
+    cy = np.array([(r["box"][1] + r["box"][3] / 2) / r["frame"][1] for r in faces])
+    out["facePositionJitter"] = round(float((cx.std() + cy.std()) / 2), 4)
+
+    # Size: relative spread of the face's scale across the clip.
+    size = np.array([np.sqrt(max(r["box"][2] * r["box"][3], 1e-6)) for r in faces])
+    out["faceSizeJitter"] = round(float(size.std() / size.mean()), 4) if size.mean() else None
+
+    # Landmarks: how far the five points move between consecutive sampled
+    # frames, in units of face width — so it does not grow just because the
+    # subject walked towards the camera.
+    steps = []
+    for a, b in zip(faces, faces[1:]):
+        if not (a.get("landmarks") and b.get("landmarks")):
+            continue
+        width = max(b["box"][2], 1e-6)
+        shared = set(a["landmarks"]) & set(b["landmarks"])
+        if not shared:
+            continue
+        moved = []
+        for name in shared:
+            ax, ay = a["landmarks"][name]; ax += a["origin"][0]; ay += a["origin"][1]
+            bx, by = b["landmarks"][name]; bx += b["origin"][0]; by += b["origin"][1]
+            moved.append(np.hypot(bx - ax, by - ay) / width)
+        steps.append(float(np.mean(moved)))
+    out["landmarkJitter"] = round(float(np.mean(steps)), 4) if steps else None
+
+    # Appearance: correlation between consecutive face thumbnails. A real
+    # face changes smoothly; this is the cheapest stand-in for the
+    # frame-to-frame embedding similarity a heavier model would compute,
+    # and it is named for what it measures rather than what it imitates.
+    sims = []
+    for a, b in zip(faces, faces[1:]):
+        ta, tb = a.get("thumb"), b.get("thumb")
+        if ta is None or tb is None:
+            continue
+        va, vb = np.asarray(ta, float).ravel(), np.asarray(tb, float).ravel()
+        if va.std() < 1e-6 or vb.std() < 1e-6:
+            continue
+        sims.append(float(np.corrcoef(va, vb)[0, 1]))
+    out["appearanceContinuity"] = round(float(np.mean(sims)), 4) if sims else None
+
+    return out
+
+
 def certainty_bands() -> list:
     """The band table, for anything that has to label a number it was
     given — so no threshold is ever written down twice."""
@@ -274,12 +405,29 @@ class _Engine:
         return crop
 
     def _face_crop_ex(self, pil_image):
+        """(crop, landmarks) — the long-standing shape, used by explain()."""
+        found = self._detect_face(pil_image)
+        return found["crop"], found["landmarks"]
+
+    def _detect_face(self, pil_image):
+        """One detection pass, everything it produced.
+
+        → {crop, landmarks, box, origin, frame, found}
+
+        `box` is (x, y, w, h) of the face and `origin` the crop's top-left
+        corner, both in the capped frame's coordinates. The video path
+        needs them to compare where a face sits from frame to frame;
+        `_face_crop_ex` throws them away and behaves exactly as before.
+        """
         import cv2
         import numpy as np
         from PIL import Image
 
+        miss = {"crop": pil_image, "landmarks": None, "box": None,
+                "origin": (0, 0), "frame": pil_image.size, "found": False}
+
         if not os.path.exists(YUNET_PATH):
-            return pil_image, None  # detector missing → analyze full frame
+            return miss  # detector missing → analyze full frame
 
         if self._detector is None:
             self._detector = cv2.FaceDetectorYN_create(
@@ -307,7 +455,7 @@ class _Engine:
         self._detector.setInputSize((bgr.shape[1], bgr.shape[0]))
         _, faces = self._detector.detect(bgr)
         if faces is None or len(faces) == 0:
-            return pil_image, None  # no face found → analyze the full frame
+            return {**miss, "frame": (w, h)}  # no face → analyze the full frame
 
         # Largest detected face = the main subject
         best = faces[int(np.argmax(faces[:, 2] * faces[:, 3]))]
@@ -317,7 +465,7 @@ class _Engine:
         x0 = max(0, int(x - m));  y0 = max(0, int(y - m))
         x1 = min(w, int(x + fw + m));  y1 = min(h, int(y + fh + m))
         if x1 <= x0 or y1 <= y0:
-            return pil_image, None
+            return {**miss, "frame": (w, h)}
 
         # YuNet landmarks (5 points) → crop coordinates, for the
         # explainability "focus region" text
@@ -328,7 +476,11 @@ class _Engine:
             ly = best[5 + i * 2] / scale - y0
             landmarks[name] = (float(lx), float(ly))
 
-        return Image.fromarray(rgb[y0:y1, x0:x1]), landmarks
+        return {"crop": Image.fromarray(rgb[y0:y1, x0:x1]),
+                "landmarks": landmarks,
+                "box": (float(x), float(y), float(fw), float(fh)),
+                "origin": (int(x0), int(y0)),
+                "frame": (w, h), "found": True}
 
     # ---- probability vector over classes (input already face-cropped)
     # TTA: averages the prediction over the image + its mirror — a small
@@ -374,8 +526,14 @@ class _Engine:
         return self._verdict(probs), 1
 
     def predict_video(self, video_path, frame_rate=CFG.DEFAULT_FRAME_RATE, max_frames=CFG.MAX_VIDEO_FRAMES):
-        """Sample ~frame_rate frames/sec (CPU-friendly), average the
-        probabilities, return the aggregate verdict."""
+        """Sample ~frame_rate frames/sec (CPU-friendly) and score each one.
+
+        → (records, meta). Every frame keeps its own P(fake), its timestamp
+        and the face geometry the temporal signals need. Combining those
+        into a verdict is `aggregate_frames`' job, deliberately outside
+        this method: extraction needs a video file, aggregation does not,
+        and only one of the two can then be tested without one.
+        """
         import cv2
         from PIL import Image
 
@@ -383,26 +541,45 @@ class _Engine:
         if not cap.isOpened():
             raise ValueError("Could not open video")
 
-        fps = cap.get(cv2.CAP_PROP_FPS) or 25
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if not fps or fps != fps or fps <= 0:   # 0, negative or NaN header
+            fps = 25.0
         step = max(1, round(fps / max(0.25, frame_rate)))  # every Nth frame
+        fake_index = self.classes.index("fake")
 
-        probs_sum, frames = None, 0
-        idx = 0
-        while frames < max_frames:
+        records, idx = [], 0
+        while len(records) < max_frames:
             ok, frame = cap.read()
             if not ok:
                 break
             if idx % step == 0:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                p = self._probs(Image.fromarray(rgb))
-                probs_sum = p if probs_sum is None else probs_sum + p
-                frames += 1
+                found = self._detect_face(Image.fromarray(rgb))
+                probs = self._probs_raw(found["crop"])
+
+                # 32x32 grey thumbnail of the crop we already made — the
+                # only extra work this whole phase adds per frame.
+                grey = cv2.cvtColor(self.np.array(found["crop"].convert("RGB")),
+                                    cv2.COLOR_RGB2GRAY)
+                thumb = cv2.resize(grey, (32, 32), interpolation=cv2.INTER_AREA)
+
+                records.append({
+                    "index": idx,
+                    "time": idx / fps,
+                    "pFake": float(probs[fake_index]),
+                    "box": found["box"],
+                    "origin": found["origin"],
+                    "frame": found["frame"],
+                    "landmarks": found["landmarks"],
+                    "thumb": thumb,
+                })
             idx += 1
         cap.release()
 
-        if not frames:
+        if not records:
             raise ValueError("No readable frames in video")
-        return self._verdict(probs_sum / frames), frames
+        return records, {"fps": float(fps), "step": int(step),
+                         "duration": idx / fps}
 
     # ---- Explainability: occlusion sensitivity ----
     # Blank out one patch at a time and watch the verdict move: the
@@ -581,13 +758,46 @@ def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
 
     # Video: our fast model only — running ViTs per-frame is too slow on CPU
     if file_type == "video":
-        (prediction, confidence), frames = eng.predict_video(path, frame_rate)
+        records, meta = eng.predict_video(path, frame_rate)
+        agg = aggregate_frames([r["pFake"] for r in records])
+        score = agg["score"]
+        prediction = "deepfake" if score >= 0.5 else "real"
+        confidence = int(round((score if score >= 0.5 else 1 - score) * 100))
+
+        hottest = sorted(records, key=lambda r: r["pFake"], reverse=True)
         return {
             "prediction": prediction,
             "confidence": confidence,
-            "framesAnalyzed": frames,
-            "ensemble": [{"model": "MobileNetV3 (ours)", "pFake": None,
-                          "note": "video mode — single fast model"}],
+            "framesAnalyzed": len(records),
+            "video": {
+                "framesAnalyzed": len(records),
+                "suspiciousFrames": agg["suspicious"],
+                "suspiciousAt": agg["suspiciousAt"],
+                "peakFakeScore": round(agg["peak"], 4),
+                "medianFakeScore": round(agg["components"]["median"], 4),
+                "meanFakeScore": round(agg["components"]["mean"], 4),
+                "topKFakeScore": round(agg["components"]["top_k"], 4),
+                "lowestFakeScore": round(agg["lowest"], 4),
+                "scoreVariance": round(agg["variance"], 6),
+                "combinedScore": round(score, 4),
+                "k": agg["k"],
+                "weights": agg["weights"],
+                "topTimestamps": [
+                    {"time": round(r["time"], 2), "timestamp": timestamp(r["time"]),
+                     "score": round(r["pFake"], 4)}
+                    for r in hottest[:CFG.VIDEO_TOP_TIMESTAMPS]],
+                "timeline": [{"t": round(r["time"], 2), "p": round(r["pFake"], 4)}
+                             for r in records],
+                "temporal": temporal_signals(records),
+                "fps": round(meta["fps"], 2),
+                "sampledEveryNthFrame": meta["step"],
+                "durationSeconds": round(meta["duration"], 2),
+            },
+            # No longer None: the frame scores do combine into one number,
+            # and hiding it left the result page with nothing to show.
+            "ensemble": [{"model": "MobileNetV3 (ours)", "pFake": round(score, 4),
+                          "weight": 1,
+                          "note": "video — median / mean / top-k over frames"}],
         }
 
     # Image: ensemble — our model + every available HF verifier vote P(fake)

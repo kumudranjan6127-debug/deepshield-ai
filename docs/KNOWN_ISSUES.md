@@ -1,7 +1,7 @@
 # Known Issues
 
 Every entry below has been **observed**, not suspected. Where a number is
-given, it was measured. Last reviewed after Phase 5, 2026-08-10.
+given, it was measured. Last reviewed after Phase 6, 2026-08-10.
 
 Severity: 🔴 wrong output or wrong information · 🟡 works but flawed ·
 🔵 limitation to document rather than fix
@@ -62,7 +62,34 @@ deferable until there is data:
 **Fix:** pick one once `scripts/evaluate.py` has measured accuracy per
 band on real data — the occupancy column makes the answer obvious.
 
-## 🟡 4. `ds_feedback` is not registered in `DS.KEYS`
+## 🟡 4. The video aggregation has never been validated
+
+Frame scores are combined as `0.40 median + 0.25 mean + 0.35 top-k`, with a
+frame counted suspicious at 0.70. Those four numbers were reasoned, not
+fitted: no labelled video set has been scored, so nothing has ever checked
+that this combination beats a plain mean on real clips.
+
+The weighting deliberately leans on the median, because a false accusation
+costs more than a missed forgery. That lean has a measurable cost — a clip
+with roughly a third of its frames strongly flagged still comes out "real".
+The response reports `suspiciousFrames` and the suspicious timestamps
+regardless of the verdict, so the evidence is visible even when the score
+does not cross, but that is a mitigation and not a fix.
+
+The same gap covers the four temporal signals: face position jitter, face
+size jitter, landmark jitter and appearance continuity are computed and
+displayed, and none of them is allowed to affect the verdict, because there
+is no evidence for what value of any of them means manipulation.
+
+`scripts/video_test.py` pins the behaviour the weights produce, which is not
+the same as showing the weights are right.
+
+**Fix:** score a labelled video set — DFDC clips are the obvious source —
+then fit the weights and the suspicious threshold against it, and check
+whether any temporal signal separates real from fake well enough to earn a
+vote.
+
+## 🟡 5. `ds_feedback` is not registered in `DS.KEYS`
 
 `DS.KEYS` lists `ds_user`, `ds_scan`, `ds_history`, `ds_settings`. The
 feedback store is written as a raw string in three places
@@ -71,14 +98,14 @@ the convention every other key follows, and "Clear history" does not clear it.
 
 **Fix:** add `FEEDBACK: 'ds_feedback'` to `DS.KEYS` and use it.
 
-## 🟡 5. OpenCV's DNN engine crashes on large batches
+## 🟡 6. OpenCV's DNN engine crashes on large batches
 
 Discovered while building the occlusion heatmap: a 36-image batch killed the
 process outright (no exception, no traceback). Batches of 4, 8, 12 and 16 were
 fine. `_forward()` now chunks at 8, which is a working guard rather than a
 diagnosis — the underlying limit in OpenCV 5.0.0.93 is unknown.
 
-## 🟡 6. Face detection failure is silent
+## 🟡 7. Face detection failure is silent
 
 When YuNet finds no face, the whole frame is analysed and the verdict is
 returned as if a face had been found. The user is never told. For non-face
@@ -86,7 +113,7 @@ images this produces confident, meaningless output.
 
 **Fix:** return a `faceFound: false` flag and have the result page say so.
 
-## 🟡 7. Verifier reliability is calibrated on very little data
+## 🟡 8. Verifier reliability is calibrated on very little data
 
 When the verifiers are enabled (`DS_VERIFIERS=1`), their weights and the
 "all ≥ 0.85 to overrule" rule were tuned against roughly ten images. Measured
@@ -100,7 +127,7 @@ misbehaviour that motivated the current settings:
 The default (verifiers off) avoids this entirely, and our own model scores
 9/9 alone. Anyone turning them on should re-validate first.
 
-## 🟡 8. Test accuracy is missing from the shipped model metadata
+## 🟡 9. Test accuracy is missing from the shipped model metadata
 
 `deepshield.onnx.json` has `"test_accuracy": null`. The 140k test split was
 never scored for V3: the Kaggle session was interrupted and the export was
@@ -113,7 +140,7 @@ specificity, ROC-AUC, PR-AUC or FPR has ever been computed for V3.
 **Fix:** score `v3_max.pth` with `scripts/evaluate.py` and patch the JSON
 from the result.
 
-## 🟡 9. Training curves for V3 cannot be reproduced
+## 🟡 10. Training curves for V3 cannot be reproduced
 
 The per-epoch history exists inside the resume checkpoint, but the plotted
 `training_curves.png` in `training/results/` is from **V2**. The V3 numbers
@@ -122,7 +149,7 @@ are recorded in `MODEL_CARD.md` and were printed live during training.
 **Fix:** re-plot from the history array in the resume file, if it is still
 available.
 
-## 🟡 10. Kaggle notebooks do not survive a lost session
+## 🟡 11. Kaggle notebooks do not survive a lost session
 
 The Colab notebook checkpoints to Google Drive and resumes cleanly. The Kaggle
 version writes to `/kaggle/working`, which is lost when an interactive session
@@ -132,14 +159,14 @@ not be recovered.
 **Fix:** use *Save Version → Save & Run All (Commit)* for long runs, which
 executes headless and persists outputs.
 
-## 🟡 11. Hugging Face downloads stall on some networks
+## 🟡 12. Hugging Face downloads stall on some networks
 
 Fetching the verifier models repeatedly froze at ~245 MB. The cause is HF's
 Xet transfer protocol; setting `HF_HUB_DISABLE_XET=1` falls back to plain
 HTTP and completes at full speed. Documented in the README troubleshooting
 table.
 
-## 🟡 12. `DOCUMENTATION.md` predates most of the system
+## 🟡 13. `DOCUMENTATION.md` predates most of the system
 
 `docs/DOCUMENTATION.md` was written when the project was frontend-only. It
 carries a note about the folder restructure, but nothing about the backend,
@@ -147,34 +174,34 @@ the model, the ensemble, explainability, the landing page or the ONNX
 migration. `CURRENT_STATE.md` and `MODEL_CARD.md` supersede it for anything
 factual.
 
-## 🟡 13. Feedback data has no operational path
+## 🟡 14. Feedback data has no operational path
 
 `POST /api/feedback` appends to `data/feedback.jsonl`, which is gitignored and
 never read by anything. The dashboard's "user-rated correct" figure is
 computed from the browser's own copy in `localStorage`, so the server-side
 file currently accumulates without a consumer.
 
-## 🔵 14. Face-swap deepfakes are not detected
+## 🔵 15. Face-swap deepfakes are not detected
 
 The headline limitation. A real DFDC video scored **97% "real"**. V3 learned
 fully generated faces; face-swaps are a different artefact family. Expected
 behaviour for this model, not a regression — see `MODEL_CARD.md`.
 
-## 🔵 15. Cross-generator generalisation is not guaranteed
+## 🔵 16. Cross-generator generalisation is not guaranteed
 
 V2 scored thispersondoesnotexist faces at 0.02–0.49 until StyleGAN2 was added
 to training; V3 scores the same images 0.97–0.98. A future generator can open
 the same gap again. Mitigated by multi-generator training and the optional
 verifiers, not solved.
 
-## 🔵 16. Processed media degrades detection
+## 🔵 17. Processed media degrades detection
 
 Screenshots, repeated compression and platform re-encoding destroy the
 artefacts detection depends on. This is why streaming-platform URLs are
 refused with an explanation rather than downloaded. Affects every detector
 on the market.
 
-## 🔵 17. Fairness is unmeasured
+## 🔵 18. Fairness is unmeasured
 
 No evaluation has been run across skin tone, age or gender. The training real
 class is FFHQ-only. Nothing here should be read as a fairness claim.
@@ -205,3 +232,6 @@ class is FFHQ-only. Nothing here should be read as a fairness claim.
 | `security_test.py` aborted on a plain Windows console | A check was named with a `→`, which cp1252 cannot encode; the suite died mid-run. Printed strings are ASCII now (Phase 4) |
 | The UI called the heatmap "Grad-CAM attention" | It is occlusion sensitivity, and it measures how much the prediction moves when a region is hidden — not where the network attends. Renamed everywhere it was shown (Phase 5) |
 | A confidence percentage read as a probability | The verdict now carries a `certainty` band, and the wording says "detection confidence", with the bands published by `/api/health` so no threshold lives in the browser (Phase 5) |
+| Video scores were plain-averaged | Median, mean and a top-k mean are combined, so partial manipulation is no longer diluted and no single frame can carry a verdict; the components ship in the response (Phase 6) |
+| The whole `video` block never reached the client | `app.py` forwards only the keys it names and silently dropped it. Fixed, and the regression suite now posts a real clip through the API so a missing block fails a test rather than a demo (Phase 6) |
+| Video regression coverage vanished on a fresh clone | `videos()` looked for committed clips and returned an empty list without complaint. It now builds a deterministic clip from the sample faces when the folder is empty (Phase 6) |

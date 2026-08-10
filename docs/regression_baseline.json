@@ -162,6 +162,110 @@
    },
    "status": 200
   },
+  "POST /api/analyze (video)": {
+   "body": {
+    "certainty": "very_strong",
+    "completedAt": "<str>",
+    "confidence": 98,
+    "device": "CPU",
+    "ensemble": [
+     {
+      "model": "MobileNetV3 (ours)",
+      "note": "video \u2014 median / mean / top-k over frames",
+      "pFake": 0.022,
+      "weight": 1
+     }
+    ],
+    "framesAnalyzed": 8,
+    "model": "MobileNetV3-Large",
+    "ok": true,
+    "prediction": "real",
+    "processingTime": "<int>",
+    "risk": "low",
+    "riskLevel": "Low",
+    "video": {
+     "combinedScore": 0.022,
+     "durationSeconds": 8.0,
+     "fps": 24.0,
+     "framesAnalyzed": 8,
+     "k": 1,
+     "lowestFakeScore": 0.0174,
+     "meanFakeScore": 0.0211,
+     "medianFakeScore": 0.0209,
+     "peakFakeScore": 0.024,
+     "sampledEveryNthFrame": 24,
+     "scoreVariance": 3e-06,
+     "suspiciousAt": 0.7,
+     "suspiciousFrames": 0,
+     "temporal": {
+      "appearanceContinuity": 0.9692,
+      "facePositionJitter": 0.0069,
+      "faceSizeJitter": 0.0378,
+      "facesFound": 8,
+      "framesSampled": 8,
+      "landmarkJitter": 0.0223
+     },
+     "timeline": [
+      {
+       "p": 0.021,
+       "t": 0.0
+      },
+      {
+       "p": 0.0174,
+       "t": 1.0
+      },
+      {
+       "p": 0.0222,
+       "t": 2.0
+      },
+      {
+       "p": 0.0209,
+       "t": 3.0
+      },
+      {
+       "p": 0.0219,
+       "t": 4.0
+      },
+      {
+       "p": 0.0208,
+       "t": 5.0
+      },
+      {
+       "p": 0.024,
+       "t": 6.0
+      },
+      {
+       "p": 0.0203,
+       "t": 7.0
+      }
+     ],
+     "topKFakeScore": 0.024,
+     "topTimestamps": [
+      {
+       "score": 0.024,
+       "time": 6.0,
+       "timestamp": "00:06"
+      },
+      {
+       "score": 0.0222,
+       "time": 2.0,
+       "timestamp": "00:02"
+      },
+      {
+       "score": 0.0219,
+       "time": 4.0,
+       "timestamp": "00:04"
+      }
+     ],
+     "weights": {
+      "mean": 0.25,
+      "median": 0.4,
+      "top_k": 0.35
+     }
+    }
+   },
+   "status": 200
+  },
   "POST /api/feedback": {
    "body": {
     "ok": true
@@ -285,14 +389,56 @@
    "version": "V3-Max"
   },
   "vid:authentic_portrait.mp4": {
+   "combined": 0.022,
    "confidence": 98,
    "framesAnalyzed": 8,
-   "prediction": "real"
+   "k": 1,
+   "mean": 0.0211,
+   "median": 0.0209,
+   "peak": 0.024,
+   "prediction": "real",
+   "suspicious": 0,
+   "temporal": {
+    "appearanceContinuity": 0.9692,
+    "facePositionJitter": 0.0069,
+    "faceSizeJitter": 0.0378,
+    "facesFound": 8,
+    "framesSampled": 8,
+    "landmarkJitter": 0.0223
+   },
+   "timelinePoints": 8,
+   "timestamps": [
+    "00:06",
+    "00:02",
+    "00:04"
+   ],
+   "topK": 0.024
   },
   "vid:synthetic_faces.mp4": {
+   "combined": 0.9775,
    "confidence": 98,
    "framesAnalyzed": 13,
-   "prediction": "deepfake"
+   "k": 2,
+   "mean": 0.9763,
+   "median": 0.9773,
+   "peak": 0.9789,
+   "prediction": "deepfake",
+   "suspicious": 13,
+   "temporal": {
+    "appearanceContinuity": 0.6813,
+    "facePositionJitter": 0.0125,
+    "faceSizeJitter": 0.0656,
+    "facesFound": 13,
+    "framesSampled": 13,
+    "landmarkJitter": 0.0275
+   },
+   "timelinePoints": 13,
+   "timestamps": [
+    "00:01",
+    "00:00",
+    "00:11"
+   ],
+   "topK": 0.9787
   }
  }
 }

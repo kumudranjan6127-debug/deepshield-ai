@@ -205,6 +205,34 @@
               </div>
             </section>
 
+            <!-- Video analysis — filled by result.js, hidden for images and
+                 for any scan saved before per-frame data existed -->
+            <section class="card card-pad fade-up" data-delay="2" id="video-card"
+                     aria-label="Video analysis" hidden>
+              <div class="card-title"><i data-lucide="film" class="icon"></i> Video analysis</div>
+
+              <dl class="meta-list" id="video-stats"><!-- rows injected --></dl>
+
+              <div class="vt-block" id="video-timeline-wrap" hidden>
+                <span class="text-xs text-3">Frame timeline — each bar is one sampled frame</span>
+                <div class="vt-track" id="video-timeline"><!-- bars injected --></div>
+                <div class="vt-axis"><span id="vt-start">00:00</span><span id="vt-end">—</span></div>
+              </div>
+
+              <div class="vt-block" id="video-marks-wrap" hidden>
+                <span class="text-xs text-3">Most suspicious timestamps</span>
+                <div class="vt-marks" id="video-marks"><!-- chips injected --></div>
+              </div>
+
+              <div class="vt-block" id="video-temporal-wrap" hidden>
+                <span class="text-xs text-3">Face consistency across frames</span>
+                <dl class="meta-list" id="video-temporal"><!-- rows injected --></dl>
+                <p class="text-xs text-3">
+                  Descriptive only — these signals are reported, not used to decide the verdict.
+                </p>
+              </div>
+            </section>
+
             <!-- Metrics -->
             <section class="metrics-grid fade-up" data-delay="2" aria-label="Analysis metrics">
               <div class="stat-card">

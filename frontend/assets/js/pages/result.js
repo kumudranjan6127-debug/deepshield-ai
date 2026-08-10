@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderVerdict(scan, isFake, isVideo);
   renderMetrics(scan);
   renderInsights(scan);
+  renderVideo(scan);
   bindFeedback(scan);
 
   // Model facts arrive from /api/health — repaint the card when they land
@@ -78,6 +79,98 @@ function renderInsights(scan) {
   if (scan.disputed) document.getElementById('disputed-chip').hidden = false;
 
   DS.icons();
+}
+
+/* ---- Video analysis ----
+   Everything here is read from scan.video, which the backend fills for
+   video scans only. An image scan, or a video analysed before Phase 6,
+   simply leaves the card hidden — no placeholder numbers. */
+function renderVideo(scan) {
+  const v = scan.video;
+  if (!v) return;
+
+  const card = document.getElementById('video-card');
+  card.hidden = false;
+
+  const pct = x => (typeof x === 'number' ? `${Math.round(x * 100)}%` : '—');
+  const row = (label, value, title) =>
+    `<div class="meta-row"${title ? ` title="${DS.util.escapeHtml(title)}"` : ''}>
+       <dt>${DS.util.escapeHtml(label)}</dt>
+       <dd class="mono">${DS.util.escapeHtml(String(value))}</dd>
+     </div>`;
+
+  const suspiciousAt = pct(v.suspiciousAt);
+  document.getElementById('video-stats').innerHTML = [
+    row('Frames analyzed', v.framesAnalyzed ?? '—'),
+    row('Suspicious frames', `${v.suspiciousFrames ?? '—'} / ${v.framesAnalyzed ?? '—'}`,
+        `Frames scoring ${suspiciousAt} or higher on their own`),
+    row('Peak fake score', pct(v.peakFakeScore)),
+    row('Median fake score', pct(v.medianFakeScore)),
+    row('Mean fake score', pct(v.meanFakeScore)),
+    row(`Top-${v.k ?? '?'} average`, pct(v.topKFakeScore),
+        'The strongest sustained evidence: the mean of the k highest-scoring frames'),
+    row('Score variance', typeof v.scoreVariance === 'number'
+        ? v.scoreVariance.toFixed(4) : '—',
+        'How much the score moved from frame to frame'),
+  ].join('');
+
+  /* Timeline — one bar per sampled frame, coloured by whether that frame
+     was suspicious on its own. */
+  const timeline = Array.isArray(v.timeline) ? v.timeline : [];
+  if (timeline.length) {
+    const at = typeof v.suspiciousAt === 'number' ? v.suspiciousAt : 0.7;
+    document.getElementById('video-timeline').innerHTML = timeline.map(f => {
+      const height = Math.max(2, Math.round((f.p || 0) * 100));
+      return `<div class="vt-bar${f.p >= at ? ' suspicious' : ''}"
+                   style="height: ${height}%"
+                   title="${DS.util.escapeHtml(String(f.t))}s — ${Math.round((f.p || 0) * 100)}% fake"></div>`;
+    }).join('');
+    const last = timeline[timeline.length - 1];
+    document.getElementById('vt-end').textContent =
+      DS.util.escapeHtml(formatClock(last.t));
+    document.getElementById('video-timeline-wrap').hidden = false;
+  }
+
+  /* The timestamps worth scrubbing to */
+  const marks = Array.isArray(v.topTimestamps) ? v.topTimestamps : [];
+  if (marks.length) {
+    document.getElementById('video-marks').innerHTML = marks.map(m =>
+      `<span class="vt-mark">${DS.util.escapeHtml(m.timestamp || formatClock(m.time))}
+         <span class="vt-mark-score">${Math.round((m.score || 0) * 100)}%</span>
+       </span>`).join('');
+    document.getElementById('video-marks-wrap').hidden = false;
+  }
+
+  /* Phase 6B consistency signals — shown, never counted */
+  const t = v.temporal || {};
+  const signals = [
+    ['Frames with a face', t.facesFound != null && t.framesSampled != null
+      ? `${t.facesFound} / ${t.framesSampled}` : null,
+      'Frames where a face was detected. The rest were scored as whole frames.'],
+    ['Face position jitter', t.facePositionJitter,
+      'How much the face moved around the frame, as a fraction of frame size'],
+    ['Face size jitter', t.faceSizeJitter,
+      'Relative spread of the face\'s scale across the clip'],
+    ['Landmark jitter', t.landmarkJitter,
+      'Frame-to-frame movement of the five facial landmarks, in face widths'],
+    ['Appearance continuity', t.appearanceContinuity,
+      'Correlation between consecutive face crops: 1.00 is a perfectly smooth clip'],
+  ].filter(([, value]) => value !== null && value !== undefined);
+
+  if (signals.length) {
+    document.getElementById('video-temporal').innerHTML = signals.map(
+      ([label, value, title]) =>
+        row(label, typeof value === 'number' ? value.toFixed(4) : value, title)
+    ).join('');
+    document.getElementById('video-temporal-wrap').hidden = false;
+  }
+
+  DS.icons();
+}
+
+function formatClock(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
 /* ---- Media preview (image or dashed placeholder) ---- */

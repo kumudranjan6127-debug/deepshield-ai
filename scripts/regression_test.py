@@ -34,7 +34,40 @@ def images():
 
 
 def videos():
-    return sorted(glob.glob(os.path.join(ROOT, "training", "video_test", "*.mp4")))
+    """Clips to regression-test the video path against.
+
+    Anything dropped in `training/video_test/` is used. If that folder is
+    empty the harness builds its own clip from the sample faces, because
+    coverage that only exists when someone remembers to add a file is not
+    coverage at all — and on a fresh clone with no clips this suite would
+    have quietly checked nothing while still reporting PASS.
+
+    The clip is written once and reused: the encoder is deterministic, so
+    the same frames give the same bytes and the same scores.
+    """
+    folder = os.path.join(ROOT, "training", "video_test")
+    found = sorted(glob.glob(os.path.join(folder, "*.mp4")))
+    if found:
+        return found
+
+    faces = images()[:2]
+    if not faces:
+        return []
+    try:
+        import cv2
+    except ImportError:
+        return []
+
+    os.makedirs(folder, exist_ok=True)
+    target = os.path.join(folder, "generated_faces.mp4")
+    frames = [cv2.resize(cv2.imread(p), (320, 320)) for p in faces]
+    writer = cv2.VideoWriter(target, cv2.VideoWriter_fourcc(*"mp4v"), 5.0, (320, 320))
+    for _ in range(3):                      # ~6 seconds, 6 sampled frames
+        for frame in frames:
+            for _ in range(5):
+                writer.write(frame)
+    writer.release()
+    return [target] if os.path.exists(target) else []
 
 
 def normalise(obj):
@@ -108,10 +141,24 @@ def engine_suite():
 
     for path in videos():
         r = inference.analyze_file(path, "video", frame_rate=1.0)
+        v = r.get("video") or {}
         out["vid:" + os.path.basename(path)] = {
             "prediction": r["prediction"],
             "confidence": r["confidence"],
             "framesAnalyzed": r["framesAnalyzed"],
+            # Aggregation: the three components and what they combined to
+            "median": v.get("medianFakeScore"),
+            "mean": v.get("meanFakeScore"),
+            "topK": v.get("topKFakeScore"),
+            "k": v.get("k"),
+            "combined": v.get("combinedScore"),
+            "peak": v.get("peakFakeScore"),
+            "suspicious": v.get("suspiciousFrames"),
+            "timestamps": [m["timestamp"] for m in v.get("topTimestamps", [])],
+            "timelinePoints": len(v.get("timeline") or []),
+            # Temporal signals are descriptive, but a change in them is
+            # still a change in behaviour and should have to be explained
+            "temporal": v.get("temporal"),
         }
     return out
 
@@ -135,6 +182,15 @@ def api_suite():
     # analyze via multipart in one shot
     status, body = post_file("/api/analyze", img, {"fileType": "image"})
     out["POST /api/analyze (multipart)"] = {"status": status, "body": normalise(body)}
+
+    # A real video through the wire. The engine's video output was already
+    # covered above, but nothing checked what survived app.py — which
+    # forwards only the keys it names, and dropped the entire `video` block
+    # on the way out until this case was added.
+    clips = videos()
+    if clips:
+        status, body = post_file("/api/analyze", clips[0], {"fileType": "video"})
+        out["POST /api/analyze (video)"] = {"status": status, "body": normalise(body)}
 
     # metadata-only request → echo verdict, no file
     status, body = post_json("/api/analyze", {"fileName": "holiday_fake.mp4",

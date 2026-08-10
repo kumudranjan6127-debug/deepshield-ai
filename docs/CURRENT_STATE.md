@@ -91,8 +91,31 @@ uploaded file deleted
 ```
 
 **Video:** one frame per second (`frameRate` setting, max 60 frames), each
-frame through the same path, probabilities averaged. Verifiers and heatmap are
-not run per-frame.
+frame through the same path. Verifiers and heatmap are not run per-frame.
+
+Frame scores are then combined three ways at once, because each summary is
+blind to something the others catch:
+
+```
+per-frame P(fake)
+   |
+   +-- median  0.40   the typical frame; a handful of outliers cannot move it
+   +-- mean    0.25   the overall level
+   +-- top-k   0.35   k = 15% of frames, so localised manipulation still
+   |                  registers but no single frame decides
+   v
+combined score -> verdict, and every component is returned
+```
+
+Averaging alone dilutes a clip that is only partly manipulated; taking the
+maximum lets one blurred frame call a real video fake. A frame counts as
+**suspicious** at 0.70 — the same boundary Phase 5 calls "strong evidence",
+rather than a second threshold invented here.
+
+The weights are **provisional**: no labelled video set has been scored, so
+they are reasoned rather than fitted, and they lean on the median because a
+false accusation costs more than a missed forgery. `scripts/video_test.py`
+pins the behaviour they produce.
 
 **Combining votes** (`inference.analyze_file`): own model weight **0.75**, the
 remaining 0.25 split across verifiers. Verifiers may raise the score only when
@@ -196,6 +219,19 @@ Live response for an image (heatmap abbreviated):
   down in the browser. The model is uncalibrated, so `confidence` ranks
   evidence and does not estimate a frequency.
 - `explain` is absent for video scans and may be `null` if the heatmap fails.
+- A **video** scan carries a `video` block instead: `framesAnalyzed`,
+  `suspiciousFrames`, `suspiciousAt`, `peakFakeScore`, `medianFakeScore`,
+  `meanFakeScore`, `topKFakeScore`, `lowestFakeScore`, `scoreVariance`,
+  `combinedScore`, `k`, `weights`, `topTimestamps` (`{time, timestamp,
+  score}`), `timeline` (`{t, p}` per sampled frame), `temporal`, `fps`,
+  `sampledEveryNthFrame` and `durationSeconds`. The score is reproducible
+  from the response alone: it is exactly `weights` applied to the three
+  components.
+- `video.temporal` holds face-consistency signals — `facesFound`,
+  `framesSampled`, `facePositionJitter`, `faceSizeJitter`, `landmarkJitter`,
+  `appearanceContinuity`. They are **descriptive and do not affect the
+  verdict**; nothing has validated what value of any of them means
+  manipulation. Each is `null` when too few frames carried a face.
 - `POST /api/feedback` requires a boolean `agree`; anything else returns 400.
 - Failures share one shape: `{"ok": false, "error": "…", "error_code": "…"}`.
   Codes in use: `NO_FILE`, `BAD_TYPE`, `BAD_MIME`, `BAD_MAGIC`,
@@ -377,14 +413,16 @@ python scripts/regression_test.py record|verify   behaviour has not changed
 python scripts/security_test.py [--unit]          50 attacks, all refused
 python scripts/model_test.py                      identity, reproducibility, parity
 python scripts/metrics_test.py                    the metric arithmetic
+python scripts/video_test.py                      frame aggregation + temporal signals
 python scripts/split_test.py                      the V4 split cannot leak
 ```
 
 | Suite | Checks | Asserts | Needs server |
 |---|---|---|---|
-| regression | 23 | Engine outputs and every API response, field by field | yes |
+| regression | 24 | Engine outputs and every API response, field by field | yes |
 | security | 50 | SSRF (v4/v6/DNS/redirects), oversized, forged extension, corrupt and empty media, malformed URLs, rate limit, concurrency, cleanup | yes |
 | model | 40 | Identity agrees across file/engine/API; repeated runs identical; ONNX vs PyTorch within 1e-4 (measured 3.2e-08); certainty bands total, unambiguous and published identically | no |
+| video | 49 | Aggregation against sequences whose answer is obvious by construction (one bad frame must not flip a real clip), plus the temporal signals and timestamp formatting | no |
 | metrics | 63 | Hand-computed answers, plus ROC-AUC against brute-force pair counting, PR-AUC against a threshold walk, and calibration (Brier/ECE/MCE) against worked examples | no |
 | split | 24 | Lifts the DFDC split out of the V4 notebook and runs it on a synthetic set whose leakage structure is known | no |
 

@@ -93,6 +93,34 @@ class Config:
     OWN_WEIGHT = 0.75                                  # verifiers share the remainder
     VERIFIER_OVERRULE_AT = 0.85                        # and only when they all agree
 
+    # ---- Video: how per-frame scores become one verdict ----
+    # Averaging alone is the wrong shape for this problem. A manipulated
+    # clip is often only partly manipulated — the face is turned away, or
+    # occluded, or the swap only holds for a few seconds — and a mean over
+    # sixty frames dilutes that into nothing. Taking the maximum has the
+    # opposite failure: one blurred frame scored 0.97 and the whole video
+    # is called fake, which is the expensive error.
+    #
+    # So three views, combined:
+    #   median   the typical frame — ignores a handful of outliers entirely
+    #   mean     the overall level
+    #   top-k    the strongest sustained evidence, k frames rather than one,
+    #            so no single frame can carry a verdict
+    #
+    # PROVISIONAL, and for the same reason as CERTAINTY_BANDS: no labelled
+    # video set has been scored, so these weights are reasoned, not fitted.
+    # They lean on the median because a false accusation costs more than a
+    # missed forgery. Every component is returned in the response, so the
+    # combination can be re-derived — or replaced — without re-running
+    # anything. `scripts/video_test.py` fixes the behaviour they produce.
+    VIDEO_WEIGHTS = {"median": 0.40, "mean": 0.25, "top_k": 0.35}
+    VIDEO_TOPK_FRACTION = 0.15      # k = 15% of sampled frames, at least 1
+    # A frame counts as suspicious when its own score reaches the level
+    # Phase 5 already calls "strong evidence" (the 70 band), rather than at
+    # a fresh number invented here. One vocabulary, used twice.
+    VIDEO_SUSPICIOUS_AT = 0.70
+    VIDEO_TOP_TIMESTAMPS = 3        # how many timestamps to surface
+
     # ---- How a confidence number is allowed to be described ----
     # A percentage invites the reading "94% probability this is fake". It is
     # not that: it is how strongly this model separated this image, and the

@@ -236,3 +236,60 @@
   .result-actions .btn { flex: 1 1 auto; }
   .result-actions .btn-primary { margin-left: 0; }
 }
+
+/* ---- Video analysis (Phase 6) ---- */
+.vt-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  margin-top: var(--s-3);
+}
+
+/* Frame timeline: one bar per sampled frame, height = that frame's score.
+   Bars flex so sixty frames and six frames both fill the width. */
+.vt-track {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 56px;
+  padding: var(--s-1);
+  border-radius: var(--r-sm);
+  background: rgba(148, 163, 184, 0.08);
+  overflow: hidden;
+}
+.vt-bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  min-height: 2px;
+  border-radius: 2px;
+  background: var(--success);
+  transition: height var(--t-slow) var(--ease);
+}
+.vt-bar.suspicious { background: var(--danger); }
+
+.vt-axis {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.vt-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+}
+.vt-mark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-1);
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+}
+.vt-mark .vt-mark-score { color: var(--text-3); font-size: 11px; }

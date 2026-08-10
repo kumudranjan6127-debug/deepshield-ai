@@ -178,6 +178,57 @@ the values specified for Phase 5, not values derived from data. They live in
 holds a copy, and `scripts/evaluate.py` prints the observed accuracy and
 occupancy of each band so they can be replaced with measured ones.
 
+### Video — how frames become one verdict
+
+The classifier is an image model. Video is handled by sampling ~1 frame per
+second (60 at most), scoring each frame through the identical pipeline, and
+combining the results:
+
+| Summary | Weight | What it is blind to without the others |
+|---|---|---|
+| median | 0.40 | manipulation confined to a few seconds |
+| mean | 0.25 | nothing much; it is the level, and it dilutes |
+| top-k mean, k = 15% | 0.35 | it over-reacts to a run of bad frames |
+
+Two failure modes this is shaped around, both real:
+
+- **Averaging dilutes.** A face-swap that only holds while the subject faces
+  the camera can be 20 frames of 0.95 inside 60 frames of 0.05. The mean is
+  0.35 and the clip passes.
+- **Maximum accuses.** One motion-blurred frame scoring 0.97 would, under a
+  max, call an authentic video a deepfake. Top-k with k > 1 needs the
+  evidence to persist.
+
+The weights **have never been fitted**. No labelled video set has been
+scored, so they are reasoned rather than measured, and they lean on the
+median because a false accusation costs more than a missed forgery. That
+lean is a real trade: a clip with a third of its frames strongly flagged
+still comes out "real", which is why the response reports
+`suspiciousFrames` and the timestamps whether or not the verdict says fake.
+Every component is returned, so the combination can be recomputed — or
+replaced — from the response alone.
+
+`scripts/video_test.py` pins the behaviour against sequences whose answer is
+obvious by construction, including the one that matters: 59 calm frames and
+one disaster must stay "real".
+
+### Temporal signals — reported, never counted
+
+Four cheap consistency measures come out of data the frames already
+produced (face box, five landmarks, a 32×32 thumbnail) — face position
+jitter, face size jitter, landmark jitter, and appearance continuity
+between consecutive crops.
+
+**None of them touches the verdict.** There is no evidence for what value of
+"landmark jitter" means manipulation, and a signal nobody has validated must
+not be allowed to change an answer. They are shown so a person can look, and
+so that when labelled video does arrive there is already something to
+correlate against.
+
+Measured cost: **1.1 s for 12 frames** on the target CPU, no extra forward
+passes and no extra face detection. That is why this is four descriptive
+numbers and not a video transformer.
+
 ### How the numbers are produced
 
 ```
@@ -276,9 +327,15 @@ provide.
 6. **Small evaluation set.** Nine held images plus dataset splits. No
    demographic breakdown has been run, so fairness across skin tone, age and
    gender is **unmeasured** — a real gap, not a claim of fairness.
-7. **Video is frame-wise.** Temporal signals (flicker, blink rate, lip-sync)
-   are unused, and per-frame scores are averaged, so a partially manipulated
-   clip can be diluted.
+7. **Video is still frame-wise.** The classifier sees single frames and
+   nothing else; it cannot see flicker, blink rate or lip-sync desync,
+   which is where most video deepfakes actually give themselves away.
+   Frames are no longer merely averaged — median, mean and a top-k mean are
+   combined, so a clip manipulated for only part of its length is no longer
+   diluted away — but the combination weights have never been fitted
+   against labelled video, and four face-consistency signals are computed
+   and shown without being allowed to affect the verdict, for the same
+   reason. See `KNOWN_ISSUES.md`.
 
 ---
 
