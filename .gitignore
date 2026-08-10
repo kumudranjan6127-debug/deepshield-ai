@@ -5,12 +5,19 @@ __pycache__/
 
 # ---- Runtime data (recreated automatically) ----
 uploads/
-data/          # user feedback log (ratings only, no media)
+# user feedback log (ratings only, no media) — the comment must be on its
+# own line: git treats a trailing one as part of the pattern, so this rule
+# silently matched nothing and data/ was staged like any other folder.
+data/
 
 # ---- Firebase credentials ----
 # Copy frontend/assets/js/firebase-config.example.js -> firebase-config.js
 # and fill your own keys. Without it the app runs in demo-login mode.
 frontend/assets/js/firebase-config.js
+
+# ---- Evaluation datasets (large, licensed, reproducible from README) ----
+eval_data/*
+!eval_data/README.md
 
 # ---- OS / editor noise ----
 Thumbs.db

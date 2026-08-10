@@ -1,14 +1,31 @@
 # Known Issues
 
 Every entry below has been **observed**, not suspected. Where a number is
-given, it was measured. Last reviewed after Phase 3, 2026-08-10.
+given, it was measured. Last reviewed after Phase 4, 2026-08-10.
 
 Severity: 🔴 wrong output or wrong information · 🟡 works but flawed ·
 🔵 limitation to document rather than fix
 
 ---
 
-## 🟡 1. `ds_feedback` is not registered in `DS.KEYS`
+## 🟡 1. The false-positive rate has never been measured
+
+Every figure the project reports is accuracy: 99.90% validation, 99.18%
+robust, 100% TPDN. None of them say how often an **authentic photograph is
+called fake**, which is the error that actually costs someone something.
+
+Measuring it needs genuine photographs scored through the deployed
+pipeline, and this repository has none — the training real class was FFHQ,
+which lives on Kaggle. Two false positives have been found by hand (a
+2687px portrait at 0.94, a camera original at 0.95); both were fixed, but
+by inspection rather than measurement.
+
+The tooling now exists and the missing piece is only data.
+
+**Fix:** fill `eval_data/real/photos` and run
+`python scripts/evaluate.py --target-fpr 0.01`. See `eval_data/README.md`.
+
+## 🟡 2. `ds_feedback` is not registered in `DS.KEYS`
 
 `DS.KEYS` lists `ds_user`, `ds_scan`, `ds_history`, `ds_settings`. The
 feedback store is written as a raw string in three places
@@ -17,14 +34,14 @@ the convention every other key follows, and "Clear history" does not clear it.
 
 **Fix:** add `FEEDBACK: 'ds_feedback'` to `DS.KEYS` and use it.
 
-## 🟡 2. OpenCV's DNN engine crashes on large batches
+## 🟡 3. OpenCV's DNN engine crashes on large batches
 
 Discovered while building the occlusion heatmap: a 36-image batch killed the
 process outright (no exception, no traceback). Batches of 4, 8, 12 and 16 were
 fine. `_forward()` now chunks at 8, which is a working guard rather than a
 diagnosis — the underlying limit in OpenCV 5.0.0.93 is unknown.
 
-## 🟡 3. Face detection failure is silent
+## 🟡 4. Face detection failure is silent
 
 When YuNet finds no face, the whole frame is analysed and the verdict is
 returned as if a face had been found. The user is never told. For non-face
@@ -32,7 +49,7 @@ images this produces confident, meaningless output.
 
 **Fix:** return a `faceFound: false` flag and have the result page say so.
 
-## 🟡 4. Verifier reliability is calibrated on very little data
+## 🟡 5. Verifier reliability is calibrated on very little data
 
 When the verifiers are enabled (`DS_VERIFIERS=1`), their weights and the
 "all ≥ 0.85 to overrule" rule were tuned against roughly ten images. Measured
@@ -46,16 +63,20 @@ misbehaviour that motivated the current settings:
 The default (verifiers off) avoids this entirely, and our own model scores
 9/9 alone. Anyone turning them on should re-validate first.
 
-## 🟡 5. Test accuracy is missing from the shipped model metadata
+## 🟡 6. Test accuracy is missing from the shipped model metadata
 
 `deepshield.onnx.json` has `"test_accuracy": null`. The 140k test split was
 never scored for V3: the Kaggle session was interrupted and the export was
 rebuilt from the resume checkpoint, which is written before the test cell
 runs. Validation, robust and TPDN figures are present and real.
 
-**Fix:** run the evaluation cell against `v3_max.pth` and patch the JSON.
+The same gap is wider than one field: no precision, recall, F1,
+specificity, ROC-AUC, PR-AUC or FPR has ever been computed for V3.
 
-## 🟡 6. Training curves for V3 cannot be reproduced
+**Fix:** score `v3_max.pth` with `scripts/evaluate.py` and patch the JSON
+from the result.
+
+## 🟡 7. Training curves for V3 cannot be reproduced
 
 The per-epoch history exists inside the resume checkpoint, but the plotted
 `training_curves.png` in `training/results/` is from **V2**. The V3 numbers
@@ -64,7 +85,7 @@ are recorded in `MODEL_CARD.md` and were printed live during training.
 **Fix:** re-plot from the history array in the resume file, if it is still
 available.
 
-## 🟡 7. Kaggle notebooks do not survive a lost session
+## 🟡 8. Kaggle notebooks do not survive a lost session
 
 The Colab notebook checkpoints to Google Drive and resumes cleanly. The Kaggle
 version writes to `/kaggle/working`, which is lost when an interactive session
@@ -74,14 +95,14 @@ not be recovered.
 **Fix:** use *Save Version → Save & Run All (Commit)* for long runs, which
 executes headless and persists outputs.
 
-## 🟡 8. Hugging Face downloads stall on some networks
+## 🟡 9. Hugging Face downloads stall on some networks
 
 Fetching the verifier models repeatedly froze at ~245 MB. The cause is HF's
 Xet transfer protocol; setting `HF_HUB_DISABLE_XET=1` falls back to plain
 HTTP and completes at full speed. Documented in the README troubleshooting
 table.
 
-## 🟡 9. `DOCUMENTATION.md` predates most of the system
+## 🟡 10. `DOCUMENTATION.md` predates most of the system
 
 `docs/DOCUMENTATION.md` was written when the project was frontend-only. It
 carries a note about the folder restructure, but nothing about the backend,
@@ -89,34 +110,34 @@ the model, the ensemble, explainability, the landing page or the ONNX
 migration. `CURRENT_STATE.md` and `MODEL_CARD.md` supersede it for anything
 factual.
 
-## 🟡 10. Feedback data has no operational path
+## 🟡 11. Feedback data has no operational path
 
 `POST /api/feedback` appends to `data/feedback.jsonl`, which is gitignored and
 never read by anything. The dashboard's "user-rated correct" figure is
 computed from the browser's own copy in `localStorage`, so the server-side
 file currently accumulates without a consumer.
 
-## 🔵 11. Face-swap deepfakes are not detected
+## 🔵 12. Face-swap deepfakes are not detected
 
 The headline limitation. A real DFDC video scored **97% "real"**. V3 learned
 fully generated faces; face-swaps are a different artefact family. Expected
 behaviour for this model, not a regression — see `MODEL_CARD.md`.
 
-## 🔵 12. Cross-generator generalisation is not guaranteed
+## 🔵 13. Cross-generator generalisation is not guaranteed
 
 V2 scored thispersondoesnotexist faces at 0.02–0.49 until StyleGAN2 was added
 to training; V3 scores the same images 0.97–0.98. A future generator can open
 the same gap again. Mitigated by multi-generator training and the optional
 verifiers, not solved.
 
-## 🔵 13. Processed media degrades detection
+## 🔵 14. Processed media degrades detection
 
 Screenshots, repeated compression and platform re-encoding destroy the
 artefacts detection depends on. This is why streaming-platform URLs are
 refused with an explanation rather than downloaded. Affects every detector
 on the market.
 
-## 🔵 14. Fairness is unmeasured
+## 🔵 15. Fairness is unmeasured
 
 No evaluation has been run across skin tone, age or gender. The training real
 class is FFHQ-only. Nothing here should be read as a fairness claim.
@@ -142,3 +163,6 @@ class is FFHQ-only. Nothing here should be read as a fairness claim.
 | Uploads were accepted on extension alone | Size, MIME, magic bytes, decoder, dimensions and duration (Phase 2) |
 | Nothing limited request rate or concurrency | 5/min per client, 2 concurrent analyses, 30-minute upload sweep (Phase 2) |
 | The model reported no version | Identity block — `model_name`, `architecture`, `version`, `runtime`, `input_size` (Phase 3) |
+| The V4 notebook split DFDC by filename | Several fakes share one source video, and that video is itself in the real class — on synthetic data with the same structure, **78 of 100** held-out files shared a face with training. The split is now by identity group, asserted at runtime and by `scripts/split_test.py` (Phase 4) |
+| Nothing in the repo could compute a metric | `ds_metrics.py` + `evaluate.py`: accuracy, precision, recall, F1, specificity, ROC-AUC, PR-AUC, FPR, FNR, per-source, threshold sweep — verified by 40 known-answer tests (Phase 4) |
+| `security_test.py` aborted on a plain Windows console | A check was named with a `→`, which cp1252 cannot encode; the suite died mid-run. Printed strings are ASCII now (Phase 4) |

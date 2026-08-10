@@ -91,6 +91,77 @@ best rather than the one that fits the training distribution best.
 - The nine held images are a sanity check, not a benchmark. No standard
   benchmark (FaceForensics++, Celeb-DF, DFDC) has been run, so these numbers
   cannot be compared against published results.
+- **Every figure above is accuracy.** Precision, recall, F1, specificity,
+  ROC-AUC, PR-AUC, false-positive rate and false-negative rate have never
+  been computed for V3. Accuracy on a balanced set hides the one thing that
+  decides whether a detector is usable — see below.
+
+### The number that is missing
+
+**V3's false-positive rate is unmeasured.**
+
+A false positive is an authentic photograph the model calls fake. It is the
+expensive error: a missed forgery leaves someone where they already were, an
+accusation puts them somewhere worse. Nothing in the table above measures it,
+because measuring it needs a set of genuine photographs and this repository
+has none — the training real class was FFHQ, which lives on Kaggle, and no
+labelled real set has ever been scored through the deployed pipeline.
+
+Two observations that are *not* a substitute for that measurement, but are
+the reason it is worth doing:
+
+- A 2687px authentic portrait once scored **0.94 fake**, and a pristine
+  camera original **0.95 fake**. Both were fixed (resolution cap, compression
+  normalisation) — but they were found by hand, one image at a time.
+- Validation is 99.90% on a set whose real class is FFHQ only. FFHQ is
+  curated, aligned, and nothing like a photo off a phone.
+
+`eval_data/README.md` says exactly which folders to fill and
+`scripts/evaluate.py` produces the number. It is one afternoon of work and
+it is the highest-value measurement left in this project.
+
+### What has been measured with the new harness
+
+Detection survives platform-style processing — on a very small sample:
+
+| Condition | What was done | Detection | Mean P(fake) |
+|---|---|---|---|
+| original | q95 re-save | 5 / 5 | 0.975 |
+| phone | 1440px cap, q92 | 5 / 5 | 0.974 |
+| screenshot | 1080px cap, PNG | 5 / 5 | 0.974 |
+| social | 720px cap, q60 | 5 / 5 | 0.975 |
+| re-encode | q55 then q40 | 5 / 5 | 0.975 |
+
+Same five StyleGAN2 faces through each condition. The files genuinely
+differ — 277 KB, 44 KB and a 1.3 MB PNG for one image — yet the score moves
+by at most **0.006**. That is the compression normalisation and the 224px
+face crop doing their job: both were added to stop false positives, and they
+buy robustness as a side effect.
+
+Read it for what it is: **5 images, one generator, no real photographs**. It
+shows the preprocessing is not fragile. It says nothing about the
+false-positive rate, and nothing about any other generator.
+
+### How the numbers are produced
+
+```
+scripts/ds_metrics.py     the arithmetic — one implementation
+scripts/evaluate.py       runs the live engine over eval_data/, writes
+                          predictions.csv, prints the metric block, the
+                          per-source table, a threshold sweep and the
+                          in-domain vs unseen comparison
+scripts/metrics_test.py   40 known-answer tests on the arithmetic
+scripts/split_test.py     24 tests that the V4 training split cannot leak
+```
+
+The training notebook computes **no** metrics. It writes raw scores to
+`predictions_*.csv`, and `evaluate.py --from-csv` turns them into the table.
+A Kaggle number and a local number therefore come from the same code, and
+anything published here can be recomputed from the CSV that produced it.
+
+Scoring goes through `inference.score_image`, the same face crop,
+compression normalisation and flip-averaging a real upload gets. A benchmark
+with its own preprocessing measures a model nobody is served by.
 
 ### Version history
 

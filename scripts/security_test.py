@@ -260,7 +260,9 @@ def live_tests():
         ("https://169.254.169.254/latest/meta-data/", "cloud metadata"),
         ("https://192.168.1.1/video.mp4", "private LAN"),
         ("https://[::1]/video.mp4", "IPv6 loopback"),
-        ("https://127.0.0.1.nip.io/video.mp4", "hostname → loopback"),
+        # ASCII only: a check name is printed, and the Windows console this
+    # project targets is cp1252 — an arrow there aborts the whole suite.
+    ("https://127.0.0.1.nip.io/video.mp4", "hostname resolves to loopback"),
         ("file:///etc/passwd", "file scheme"),
         ("ftp://example.com/v.mp4", "ftp scheme"),
     ]:

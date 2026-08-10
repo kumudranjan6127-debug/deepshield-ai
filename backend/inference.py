@@ -533,6 +533,22 @@ def _get_hf_engines():
 
 # ---------------------------------------------------------- public API
 
+def score_image(path) -> float:
+    """→ P(fake) for one image, through the exact preprocessing a real
+    request gets: face crop, compression normalisation, flip-averaged.
+
+    Evaluation needs the probability rather than the rounded verdict, and
+    it must not pay for the occlusion heatmap — 36 extra forward passes
+    per image would put a 10,000-image benchmark out of reach. Scoring a
+    different way than serving would measure a model nobody uses, so this
+    shares `_probs` with the request path instead of reimplementing it."""
+    from PIL import Image
+    eng = _get_engine()
+    with Image.open(path) as im:
+        probs = eng._probs(im)
+    return float(probs[eng.classes.index("fake")])
+
+
 def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
     """Main entry for app.py.
     → dict {prediction, confidence, framesAnalyzed, ensemble?}"""

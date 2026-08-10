@@ -6,7 +6,7 @@ recorded in this document.
 
 | | |
 |---|---|
-| Snapshot date | 2026-08-10 (updated after Phase 3) |
+| Snapshot date | 2026-08-10 (updated after Phase 4) |
 | Commit | `ab0103d983ed5b272f964ee3cc750a91116b3c8c` (`ab0103d`) |
 | Commit subject | Run the model as ONNX: 1.9 GB backend becomes 197 MB |
 | Branch | `main`, clean working tree, 31 commits |
@@ -343,6 +343,9 @@ backend/           app.py (267 lines) · inference.py (565 lines)
 models/            live ONNX + metadata + YuNet + archive/
 training/          Kaggle/Colab notebooks, result graphs, test media
 scripts/           ds.js (server control) · export_onnx.py (.pth → ONNX)
+                   evaluate.py + ds_metrics.py (Phase 4 evaluation)
+                   *_test.py (regression, security, model, metrics, split)
+eval_data/         labelled images to evaluate on (gitignored)
 docs/              this file, MODEL_CARD.md, KNOWN_ISSUES.md, DOCUMENTATION.md
 uploads/ data/     runtime only, gitignored
 venv/              local environment, gitignored
@@ -359,14 +362,45 @@ venv/              local environment, gitignored
 python scripts/regression_test.py record|verify   behaviour has not changed
 python scripts/security_test.py [--unit]          50 attacks, all refused
 python scripts/model_test.py                      identity, reproducibility, parity
+python scripts/metrics_test.py                    the metric arithmetic
+python scripts/split_test.py                      the V4 split cannot leak
 ```
 
-| Suite | Checks | Asserts |
-|---|---|---|
-| regression | 23 | Engine outputs and every API response, field by field |
-| security | 50 | SSRF (v4/v6/DNS/redirects), oversized, forged extension, corrupt and empty media, malformed URLs, rate limit, concurrency, cleanup |
-| model | 32 | Identity agrees across file/engine/API; repeated runs identical; ONNX vs PyTorch within 1e-4 (measured 3.2e-08) |
+| Suite | Checks | Asserts | Needs server |
+|---|---|---|---|
+| regression | 23 | Engine outputs and every API response, field by field | yes |
+| security | 50 | SSRF (v4/v6/DNS/redirects), oversized, forged extension, corrupt and empty media, malformed URLs, rate limit, concurrency, cleanup | yes |
+| model | 32 | Identity agrees across file/engine/API; repeated runs identical; ONNX vs PyTorch within 1e-4 (measured 3.2e-08) | no |
+| metrics | 40 | Hand-computed answers, plus ROC-AUC against brute-force pair counting and PR-AUC against a threshold walk | no |
+| split | 24 | Lifts the DFDC split out of the V4 notebook and runs it on a synthetic set whose leakage structure is known | no |
 
 The regression baseline lives in `docs/regression_baseline.json`. Live
 suites need the server running; `security_test.py` sends ~25 requests, so
-start both it and the server with `DS_RATE_LIMIT=50`.
+start both it and the server with `DS_RATE_LIMIT=50` — and pass it to
+`ds.js` itself, since a plain `restart` drops the variable and the suite
+then throttles itself.
+
+---
+
+## 11. Evaluation
+
+```
+python scripts/evaluate.py                        scores eval_data/
+python scripts/evaluate.py --seen sg1,sg2,dfdc    in-domain vs unseen
+python scripts/evaluate.py --from-csv preds.csv   re-score a training run
+python scripts/evaluate.py --conditions DIR       phone/screenshot/social variants
+```
+
+`ds_metrics.py` holds the arithmetic — accuracy, precision, recall, F1,
+specificity, ROC-AUC, PR-AUC, FPR, FNR — and nothing else computes a metric,
+including the training notebook. The notebook emits raw scores as
+`predictions_*.csv`; `--from-csv` turns them into the report. Kaggle numbers
+and local numbers are therefore the same arithmetic, and any published figure
+can be recomputed from the CSV behind it.
+
+Scoring calls `inference.score_image`, the request path's own preprocessing
+minus the heatmap. Undefined metrics print `n/a`: a ROC-AUC over one class is
+not 0.5.
+
+Drop data into `eval_data/` — see `eval_data/README.md` for the layout and
+the identity-separation rules. The folder is gitignored apart from that file.
