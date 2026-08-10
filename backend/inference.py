@@ -549,30 +549,40 @@ class _Engine:
 
         records, idx = [], 0
         while len(records) < max_frames:
+            # Sampling at 1 fps from a 30 fps clip discards 29 frames out of
+            # every 30. `read()` fully decodes and colour-converts each one
+            # first; `grab()` advances the stream without paying for a frame
+            # nobody looks at. Same frames chosen, same scores, less work.
+            if idx % step:
+                if not cap.grab():
+                    break
+                idx += 1
+                continue
+
             ok, frame = cap.read()
             if not ok:
                 break
-            if idx % step == 0:
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                found = self._detect_face(Image.fromarray(rgb))
-                probs = self._probs_raw(found["crop"])
 
-                # 32x32 grey thumbnail of the crop we already made — the
-                # only extra work this whole phase adds per frame.
-                grey = cv2.cvtColor(self.np.array(found["crop"].convert("RGB")),
-                                    cv2.COLOR_RGB2GRAY)
-                thumb = cv2.resize(grey, (32, 32), interpolation=cv2.INTER_AREA)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            found = self._detect_face(Image.fromarray(rgb))
+            probs = self._probs_raw(found["crop"])
 
-                records.append({
-                    "index": idx,
-                    "time": idx / fps,
-                    "pFake": float(probs[fake_index]),
-                    "box": found["box"],
-                    "origin": found["origin"],
-                    "frame": found["frame"],
-                    "landmarks": found["landmarks"],
-                    "thumb": thumb,
-                })
+            # 32x32 grey thumbnail of the crop we already made - the only
+            # extra work the temporal signals add per frame.
+            grey = cv2.cvtColor(self.np.array(found["crop"].convert("RGB")),
+                                cv2.COLOR_RGB2GRAY)
+            thumb = cv2.resize(grey, (32, 32), interpolation=cv2.INTER_AREA)
+
+            records.append({
+                "index": idx,
+                "time": idx / fps,
+                "pFake": float(probs[fake_index]),
+                "box": found["box"],
+                "origin": found["origin"],
+                "frame": found["frame"],
+                "landmarks": found["landmarks"],
+                "thumb": thumb,
+            })
             idx += 1
         cap.release()
 
@@ -595,8 +605,11 @@ class _Engine:
 
         img = self._normalize_compression(face_img.convert("RGB"))
         base_input = self._to_input(img)
-        cls = int(self._forward(base_input[None]).argmax())
-        base_score = float(self._forward(base_input[None])[0, cls])
+        # One forward, read twice — this used to run the identical tensor
+        # through the network a second time to fetch a value it already had.
+        base_probs = self._forward(base_input[None])
+        cls = int(base_probs.argmax())
+        base_score = float(base_probs[0, cls])
 
         # One batch: the image with each patch greyed out in turn
         S = self.size

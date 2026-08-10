@@ -358,22 +358,37 @@ Python 3.14.7 · Node v24.17.0 (Node runs only `scripts/ds.js` and `serve.js`).
 
 ## 7. Measured performance
 
-Measured on this machine (4 cores, CPU-only), ONNX backend, verifiers off:
+`python scripts/benchmark.py` produces this. Median of 3 runs, 4 cores,
+CPU-only, ONNX backend, verifiers off. Stages are disjoint — the forwards
+that happen *inside* the heatmap are billed to `explain`, not counted twice.
 
-| Operation | Time |
-|---|---|
-| Model load | 0.42 s |
-| Image, first call | 0.94 s |
-| Image, warm (avg of 5) | **0.61 s** (min 0.55, max 0.66) |
-| Video, 8 sampled frames | 1.45 s |
-| Video, 13 sampled frames | 1.62 s |
-| Peak RSS after 4 analyses | **199 MB** |
+| Case | decode+detect | normalise | prepare | forward | explain | other | **total** |
+|---|---|---|---|---|---|---|---|
+| image 224px | 0.004 | 0.002 | 0.004 | 0.018 | **0.390** | — | **0.42 s** |
+| image 1024px | 0.072 | 0.016 | 0.017 | 0.019 | **0.377** | — | **0.49 s** |
+| video 10 s | 0.139 | 0.028 | 0.048 | 0.186 | — | 0.093 | **0.49 s** |
+| video 30 s | 0.447 | 0.086 | 0.166 | 0.599 | — | 0.266 | **1.57 s** |
+| video 60 s | 0.890 | 0.174 | 0.291 | 1.179 | — | 0.453 | **2.99 s** |
 
-Image timings include the occlusion heatmap (36 extra forward passes,
-chunked 8 at a time).
+**Images are the heatmap.** Occlusion sensitivity is **93%** of a 224px
+image's latency and 76% of a 1024px one — 36 extra forward passes to explain
+a verdict the model reached in 18 ms. Chunk size is not the lever: 36
+forwards take 320–331 ms whether they go through in batches of 4, 8, 12, 16
+or 18, so the `MAX_FORWARD_BATCH = 8` guard costs nothing.
 
-**Footprint:** backend dependencies 197 MB, model 16.8 MB, peak RAM ~200 MB —
-within the 512 MB free hosting tiers.
+**Video is linear**, ~50 ms per sampled frame at every length, so there is no
+fixed overhead to attack — only per-frame work.
+
+| Case | frames | peak RSS | over baseline | CPU s/run | cores used |
+|---|---|---|---|---|---|
+| image 224px | 1 | 184 MB | 43 MB | 0.92 | 2.2 |
+| image 1024px | 1 | 260 MB | 52 MB | 1.17 | 2.4 |
+| video 60 s | 60 | 230 MB | 16 MB | 6.09 | 2.0 |
+
+Peak RSS stays inside a 512 MB tier. Note the benchmark clips are 480×480 at
+10 fps — a phone shoots 720p at 30 fps, where decode costs more.
+
+**Footprint:** backend dependencies 197 MB, model 16.8 MB, peak RAM ~260 MB.
 
 ---
 
