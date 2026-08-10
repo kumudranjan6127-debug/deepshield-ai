@@ -1,4 +1,8 @@
 {
+  "model_name": "DeepShield",
+  "architecture": "MobileNetV3-Large",
+  "version": "V3-Max",
+  "runtime": "ONNX",
   "arch": "mobilenet_v3_large",
   "classes": [
     "fake",

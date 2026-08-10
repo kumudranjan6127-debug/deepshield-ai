@@ -40,6 +40,17 @@ ARCH_PARAMS = {
 }
 
 
+def version_from(meta: dict) -> str:
+    """Training run identifier, e.g. 'V3-Max'.
+
+    Older checkpoints predate the explicit field, so it is recovered from
+    the leading token of `trained_on` ("V3-Max multi-generator: …") rather
+    than being invented here."""
+    described = str(meta.get("trained_on") or "")
+    first = described.split(":")[0].split()[0].strip() if described else ""
+    return first if first.lower().startswith("v") else "unversioned"
+
+
 def risk_for(prediction: str, confidence: int) -> str:
     """Risk label for a verdict — one definition, used by every caller."""
     if prediction == "deepfake":
@@ -125,9 +136,19 @@ class _Engine:
 
         self.info = {
             "engine": "live",
+            # ---- identity: one block, read from the model's own metadata ----
+            "model_name": self.meta.get("model_name", "DeepShield"),
+            "architecture": ARCH_NAMES.get(self.arch, self.arch),
+            "version": self.meta.get("version") or version_from(self.meta),
+            "runtime": "ONNX" if self.backend == "onnx" else "PyTorch",
+            "input_size": self.size,
+            "classes": list(self.classes),
+            # ---- provenance ----
             "backend": self.backend,
             "checkpoint": self.checkpoint_name,
             "arch": self.arch,
+            "params": ARCH_PARAMS.get(self.arch),
+            # ---- measured performance ----
             "val_accuracy": self.meta.get("val_accuracy"),
             "test_accuracy": self.meta.get("test_accuracy"),
             "tpdn_accuracy": self.meta.get("tpdn_accuracy"),

@@ -50,7 +50,18 @@ def main():
         opset_version=17, dynamo=False,
     )
 
+    # Identity travels with the weights, so nothing downstream has to
+    # guess what it is running.
+    trained_on = ck.get("trained_on") or ""
+    version = ck.get("version") or (
+        trained_on.split(":")[0].split()[0] if trained_on else "unversioned")
+
     meta = {
+        "model_name": "DeepShield",
+        "architecture": {"mobilenet_v3_small": "MobileNetV3-Small",
+                         "mobilenet_v3_large": "MobileNetV3-Large"}.get(arch, arch),
+        "version": version,
+        "runtime": "ONNX",
         "arch": arch,
         "classes": classes,
         "input_size": size,

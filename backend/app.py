@@ -86,17 +86,31 @@ def assets(path):
 def model_identity() -> dict:
     """What is actually loaded, asked of the engine rather than hardcoded.
 
-    Falls back to the advertised design when no model is present, so the
-    simulated mode still describes the system truthfully."""
+    With no model present the fields say so rather than describing a model
+    that is not running — the UI shows "Simulated (demo)" in that state."""
     info = inference.engine_info()
-    arch = info.get("arch", "")
+    if not info:
+        return {
+            "model_name": "DeepShield", "architecture": "—", "version": "—",
+            "runtime": "simulated", "input_size": None,
+            "name": "MobileNetV3", "params": "—", "input": "—",
+            "backend": "none", "device": "CPU",
+        }
+
+    size = info.get("input_size")
     return {
-        "name": inference.ARCH_NAMES.get(arch, "MobileNetV3"),
-        "params": inference.ARCH_PARAMS.get(arch, "—"),
-        "input": f"{info.get('input_size', 224)} × {info.get('input_size', 224)}",
-        "backend": info.get("backend", "none"),
+        # The block Phase 3 specifies
+        "model_name": info.get("model_name", "DeepShield"),
+        "architecture": info.get("architecture"),
+        "version": info.get("version"),
+        "runtime": info.get("runtime"),
+        "input_size": size,
+        # Display fields the existing pages already read
+        "name": info.get("architecture"),
+        "params": info.get("params") or "—",
+        "input": f"{size} × {size}" if size else "—",
+        "backend": info.get("runtime", "none"),
         "device": "CPU",
-        "version": "1.0.0",
     }
 
 

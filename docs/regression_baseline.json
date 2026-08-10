@@ -7,25 +7,39 @@
   "GET /api/health": {
    "body": {
     "arch": "mobilenet_v3_large",
+    "architecture": "MobileNetV3-Large",
     "backend": "onnx",
     "checkpoint": "deepshield.onnx",
+    "classes": [
+     "fake",
+     "real"
+    ],
     "dfdc_accuracy": null,
     "engine": "live",
+    "input_size": 224,
     "model": {
-     "backend": "onnx",
+     "architecture": "MobileNetV3-Large",
+     "backend": "ONNX",
      "device": "CPU",
      "input": "224 \u00d7 224",
+     "input_size": 224,
+     "model_name": "DeepShield",
      "name": "MobileNetV3-Large",
      "params": "5.4M",
-     "version": "1.0.0"
+     "runtime": "ONNX",
+     "version": "V3-Max"
     },
+    "model_name": "DeepShield",
     "ok": true,
+    "params": "5.4M",
+    "runtime": "ONNX",
     "status": "ok",
     "test_accuracy": null,
     "tpdn_accuracy": 100.0,
     "trained_on": "V3-Max multi-generator: SG1 + TPDN/SG2 + diffusion, 10 epochs, large",
     "val_accuracy": 99.9,
-    "verifiers": false
+    "verifiers": false,
+    "version": "V3-Max"
    },
    "status": 200
   },
@@ -217,15 +231,25 @@
   },
   "info": {
    "arch": "mobilenet_v3_large",
+   "architecture": "MobileNetV3-Large",
    "backend": "onnx",
    "checkpoint": "deepshield.onnx",
+   "classes": [
+    "fake",
+    "real"
+   ],
    "dfdc_accuracy": null,
    "engine": "live",
+   "input_size": 224,
+   "model_name": "DeepShield",
+   "params": "5.4M",
+   "runtime": "ONNX",
    "test_accuracy": null,
    "tpdn_accuracy": 100.0,
    "trained_on": "V3-Max multi-generator: SG1 + TPDN/SG2 + diffusion, 10 epochs, large",
    "val_accuracy": 99.9,
-   "verifiers": false
+   "verifiers": false,
+   "version": "V3-Max"
   },
   "vid:authentic_portrait.mp4": {
    "confidence": 98,

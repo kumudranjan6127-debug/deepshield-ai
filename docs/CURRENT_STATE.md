@@ -6,7 +6,7 @@ recorded in this document.
 
 | | |
 |---|---|
-| Snapshot date | 2026-08-10 |
+| Snapshot date | 2026-08-10 (updated after Phase 3) |
 | Commit | `ab0103d983ed5b272f964ee3cc750a91116b3c8c` (`ab0103d`) |
 | Commit subject | Run the model as ONNX: 1.9 GB backend becomes 197 MB |
 | Branch | `main`, clean working tree, 31 commits |
@@ -23,7 +23,7 @@ This is the single source of truth; see `MODEL_CARD.md` for the full card.
 | Artifact | Size | Role |
 |---|---|---|
 | `models/deepshield.onnx` | 16.8 MB | **The live model.** Loaded by default |
-| `models/deepshield.onnx.json` | 535 B | Classes, input size, normalisation, metrics |
+| `models/deepshield.onnx.json` | ~700 B | Identity block, classes, input size, normalisation, metrics |
 | `models/deepshield_mobilenetv3.pth` | 17.0 MB | Same weights, PyTorch. Fallback only |
 | `models/face_detection_yunet.onnx` | 232 KB | YuNet face detector |
 | `models/archive/v1_baseline.pth` | 6.2 MB | History |
@@ -34,6 +34,10 @@ This is the single source of truth; see `MODEL_CARD.md` for the full card.
 
 ```json
 {
+  "model_name": "DeepShield",
+  "architecture": "MobileNetV3-Large",
+  "version": "V3-Max",
+  "runtime": "ONNX",
   "arch": "mobilenet_v3_large",
   "classes": ["fake", "real"],
   "input_size": 224,
@@ -112,11 +116,19 @@ final verdict.
 
 ```json
 {
+  "ok": true,
   "status": "ok",
   "engine": "live",
+  "model_name": "DeepShield",
+  "architecture": "MobileNetV3-Large",
+  "version": "V3-Max",
+  "runtime": "ONNX",
+  "input_size": 224,
+  "classes": ["fake", "real"],
   "backend": "onnx",
   "checkpoint": "deepshield.onnx",
   "arch": "mobilenet_v3_large",
+  "params": "5.4M",
   "val_accuracy": 99.9,
   "tpdn_accuracy": 100,
   "test_accuracy": null,
@@ -124,15 +136,17 @@ final verdict.
   "trained_on": "V3-Max multi-generator: SG1 + TPDN/SG2 + diffusion, 10 epochs, large",
   "verifiers": false,
   "model": {
-    "name": "MobileNetV3-Small", "params": "2.5M", "backend": "PyTorch",
-    "input": "224 × 224", "device": "CPU", "version": "1.0.0"
+    "model_name": "DeepShield", "architecture": "MobileNetV3-Large",
+    "version": "V3-Max", "runtime": "ONNX", "input_size": 224,
+    "name": "MobileNetV3-Large", "params": "5.4M",
+    "input": "224 × 224", "backend": "ONNX", "device": "CPU"
   }
 }
 ```
 
-> ⚠️ The nested `model` block is **stale** — it is a hardcoded constant in
-> `backend/app.py` and still describes the V1/V2 era. `arch` and `checkpoint`
-> are the accurate fields. See `KNOWN_ISSUES.md` #1.
+Every field is read from `models/deepshield.onnx.json` at load; no model
+fact is written twice. `scripts/model_test.py` asserts the metadata file,
+the loaded engine and this response agree.
 
 ### POST /api/analyze
 
@@ -143,12 +157,13 @@ Live response for an image (heatmap abbreviated):
 
 ```json
 {
+  "ok": true,
   "prediction": "real",
   "confidence": 94,
   "riskLevel": "Low",
   "framesAnalyzed": 1,
   "processingTime": 831,
-  "model": "MobileNetV3-Small",
+  "model": "MobileNetV3-Large",
   "device": "CPU",
   "completedAt": "2026-08-10T14:14:03.589570+00:00",
   "disputed": false,
@@ -162,18 +177,49 @@ Live response for an image (heatmap abbreviated):
 }
 ```
 
-> ⚠️ The top-level `"model"` field also comes from the stale constant.
-
 **Contract notes**
 - `prediction` ∈ `"real" | "deepfake"`; `confidence` is an integer percent of
   the winning class; `riskLevel` ∈ `"Low" | "Medium" | "High"`.
 - `ensemble[0]` is always our own model. `pFake` is its raw probability.
 - `explain` is absent for video scans and may be `null` if the heatmap fails.
 - `POST /api/feedback` requires a boolean `agree`; anything else returns 400.
+- Failures share one shape: `{"ok": false, "error": "…", "error_code": "…"}`.
+  Codes in use: `NO_FILE`, `BAD_TYPE`, `BAD_MIME`, `BAD_MAGIC`,
+  `EMPTY_FILE`, `CORRUPT_MEDIA`, `IMAGE_TOO_LARGE`, `IMAGE_TOO_SMALL`,
+  `VIDEO_TOO_LONG`, `TOO_LARGE`, `BLOCKED_URL`, `INSECURE_URL`,
+  `URL_NOT_VIDEO`, `BAD_FIELD`, `RATE_LIMITED` (429), `BUSY` (503),
+  `INVALID_INPUT`, `INTERNAL`. A missing **page** stays a normal HTML 404;
+  only `/api/*` returns JSON errors.
 
 ---
 
-## 4. Frontend
+## 4. Request handling and security
+
+Every request passes the same gates, cheapest first:
+
+```
+rate limit (5/min per client)
+   ↓
+upload:  MAX_CONTENT_LENGTH → extension → MIME → magic bytes
+   ↓                        → decode → dimensions / duration
+url:     https → DNS → every resolved address must be public
+   ↓            → each redirect re-validated
+concurrency gate (2 analyses at once, then 503)
+   ↓
+inference
+```
+
+Blocked outbound destinations: loopback, private (10/8, 172.16/12,
+192.168/16), link-local (169.254/16 — cloud metadata), reserved,
+multicast, and the IPv6 equivalents including `::1`, `fe80::/10`,
+`fc00::/7` and `::ffff:` mapped addresses.
+
+Staged uploads are swept after 30 minutes by a background thread and at
+startup; an analysed file is deleted as soon as the verdict is returned.
+
+Implemented in `backend/security.py`; limits live in `config.py`.
+
+## 5. Frontend
 
 Framework-free HTML/CSS/JS. 11 pages:
 
@@ -206,7 +252,7 @@ Live engine → real analysis; otherwise the simulated engine, labelled
 
 ---
 
-## 5. Dependencies
+## 6. Dependencies
 
 **Runtime (`requirements.txt`)** — the lean install, ~197 MB:
 
@@ -247,7 +293,7 @@ Python 3.14.7 · Node v24.17.0 (Node runs only `scripts/ds.js` and `serve.js`).
 
 ---
 
-## 6. Measured performance
+## 7. Measured performance
 
 Measured on this machine (4 cores, CPU-only), ONNX backend, verifiers off:
 
@@ -268,7 +314,7 @@ within the 512 MB free hosting tiers.
 
 ---
 
-## 7. Accuracy on the held test images
+## 8. Accuracy on the held test images
 
 Nine images kept outside training: five thispersondoesnotexist (StyleGAN2)
 faces and one authentic press portrait at four resolutions.
@@ -289,9 +335,7 @@ faces and one authentic press portrait at four resolutions.
 no PyTorch installed. This is a small sample and is not a benchmark result —
 see `MODEL_CARD.md` for what has and has not been evaluated.
 
----
-
-## 8. Repository layout
+## 9. Repository layout
 
 ```
 frontend/          11 pages + assets (css, js, fonts, icons)
@@ -306,3 +350,23 @@ venv/              local environment, gitignored
 
 **Operating the server:** `npm start` · `npm run status` · `npm run stop` ·
 `npm run restart`, or the `START-/STOP-DeepShield.bat` files.
+
+---
+
+## 10. Tests
+
+```
+python scripts/regression_test.py record|verify   behaviour has not changed
+python scripts/security_test.py [--unit]          50 attacks, all refused
+python scripts/model_test.py                      identity, reproducibility, parity
+```
+
+| Suite | Checks | Asserts |
+|---|---|---|
+| regression | 23 | Engine outputs and every API response, field by field |
+| security | 50 | SSRF (v4/v6/DNS/redirects), oversized, forged extension, corrupt and empty media, malformed URLs, rate limit, concurrency, cleanup |
+| model | 32 | Identity agrees across file/engine/API; repeated runs identical; ONNX vs PyTorch within 1e-4 (measured 3.2e-08) |
+
+The regression baseline lives in `docs/regression_baseline.json`. Live
+suites need the server running; `security_test.py` sends ~25 requests, so
+start both it and the server with `DS_RATE_LIMIT=50`.
