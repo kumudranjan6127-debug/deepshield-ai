@@ -28,9 +28,25 @@ from flask import Flask, jsonify, request, send_from_directory
 
 import errors
 import inference
+import security
 from config import CFG
 
 log = logging.getLogger("deepshield")
+
+# Traffic controls, shared by every request
+limiter = security.RateLimiter(CFG.RATE_LIMIT, CFG.RATE_WINDOW_SECONDS)
+gate = security.InferenceGate(CFG.MAX_CONCURRENT_ANALYSES, CFG.QUEUE_WAIT_SECONDS)
+
+
+def client_key() -> str:
+    """Who is calling. X-Forwarded-For is only consulted behind a proxy we
+    were told to trust — otherwise any client could spoof its identity and
+    walk around the rate limit."""
+    if CFG.TRUST_PROXY:
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return request.remote_addr or "unknown"
 
 
 def setup_logging():
@@ -45,6 +61,8 @@ def setup_logging():
 
 CFG.ensure_dirs()
 app = Flask(__name__, static_folder=None)
+# Refused by Werkzeug before the body is read into memory.
+app.config["MAX_CONTENT_LENGTH"] = CFG.MAX_UPLOAD_BYTES
 errors.register(app)
 
 
@@ -199,17 +217,28 @@ def feedback():
 def upload():
     """Stage a file for analysis. A File object cannot survive the page
     navigation to processing.html, so the upload page parks it here and
-    passes the returned uploadId along."""
+    passes the returned uploadId along.
+
+    Validation runs cheapest-first: size (already enforced by
+    MAX_CONTENT_LENGTH), extension, declared type, magic bytes — then the
+    file is written and actually decoded before we admit to holding it."""
+    limiter.check(client_key())
+
     if "file" not in request.files:
         raise errors.no_file()
     f = request.files["file"]
-    ext = os.path.splitext(f.filename or "")[1].lower()
-    if ext not in CFG.ALLOWED_UPLOAD_EXTS:
-        raise errors.bad_type()
+    ext, kind = security.validate_upload(f)
 
     upload_id = uuid.uuid4().hex + ext
-    f.save(os.path.join(CFG.UPLOAD_DIR, upload_id))
-    log.info("staged upload %s (%s)", upload_id, f.filename)
+    path = os.path.join(CFG.UPLOAD_DIR, upload_id)
+    f.save(path)
+    try:
+        details = security.validate_media_file(path, kind)
+    except Exception:
+        discard(path)          # never keep something we rejected
+        raise
+
+    log.info("staged upload %s (%s, %s)", upload_id, f.filename, details)
     return jsonify({"ok": True, "uploadId": upload_id})
 
 
@@ -222,13 +251,22 @@ def _read_request(live: bool):
     if "file" in request.files:
         f = request.files["file"]
         file_name = f.filename or "upload"
-        file_type = request.form.get("fileType", "image")
         frame_rate = float(request.form.get("frameRate", CFG.DEFAULT_FRAME_RATE))
+        # The declared kind is cross-checked against the real container
+        ext, kind = security.validate_upload(f)
+        file_type = request.form.get("fileType", kind)
+        if file_type != kind:
+            log.info("declared %s but the file is a %s — trusting the file",
+                     file_type, kind)
+            file_type = kind
         if live:
-            ext = os.path.splitext(file_name)[1] or (
-                ".mp4" if file_type == "video" else ".jpg")
             path = new_temp_path(ext)
             f.save(path)
+            try:
+                security.validate_media_file(path, kind)
+            except Exception:
+                discard(path)
+                raise
             return file_name, file_type, os.path.getsize(path), frame_rate, path, True
         return file_name, file_type, len(f.read()), frame_rate, None, False
 
@@ -247,7 +285,13 @@ def _read_request(live: bool):
                     frame_rate, staged, True)
         if url:
             path = new_temp_path(".mp4")
-            return file_name, file_type, download_video(url, path), frame_rate, path, True
+            size = security.safe_download(url, path)   # scheme + DNS + IP + redirects
+            try:
+                security.validate_media_file(path, "video")
+            except Exception:
+                discard(path)
+                raise
+            return file_name, "video", size, frame_rate, path, True
 
     return file_name, file_type, file_size, frame_rate, None, False
 
@@ -255,6 +299,7 @@ def _read_request(live: bool):
 @app.post("/api/analyze")
 def analyze():
     started = time.perf_counter()
+    limiter.check(client_key())
     live = inference.engine_available()
     media_path = owned = None
 
@@ -264,7 +309,9 @@ def analyze():
 
         extras = {}
         if live and media_path:
-            result = inference.analyze_file(media_path, file_type, frame_rate)
+            # One analysis per worker slot; the rest wait, then get a 503
+            with gate:
+                result = inference.analyze_file(media_path, file_type, frame_rate)
             prediction = result["prediction"]
             confidence = result["confidence"]
             frames = result["framesAnalyzed"]
@@ -298,5 +345,10 @@ if __name__ == "__main__":
     setup_logging()
     log.info("DeepShield AI backend running at http://localhost:%d", CFG.PORT)
     log.info("config: %s", CFG.summary())
+
+    # Anything left staged from a previous run is already abandoned
+    security.cleanup_uploads()
+    security.start_cleanup_thread()
+
     print(f"DeepShield AI backend running at http://localhost:{CFG.PORT}")
     app.run(host=CFG.HOST, port=CFG.PORT, debug=CFG.DEBUG)

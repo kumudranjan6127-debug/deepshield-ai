@@ -61,6 +61,30 @@ class Config:
     MAX_VIDEO_FRAMES = _int("DS_MAX_FRAMES", 60)
     DEFAULT_FRAME_RATE = 1.0
 
+    # ---- Security: uploads ----
+    # Flask rejects anything larger before the body is buffered.
+    MAX_UPLOAD_BYTES = _int("DS_MAX_UPLOAD_MB", 100) * 1024 * 1024
+    MAX_IMAGE_PIXELS = _int("DS_MAX_IMAGE_PIXELS", 40_000_000)  # ~6300² — bomb guard
+    MAX_VIDEO_SECONDS = _int("DS_MAX_VIDEO_SECONDS", 300)
+
+    # ---- Security: outbound URLs (SSRF) ----
+    # Plain HTTP is off by default; set DS_ALLOW_HTTP=1 for local testing.
+    ALLOW_HTTP_URLS = _bool("DS_ALLOW_HTTP")
+    MAX_REDIRECTS = _int("DS_MAX_REDIRECTS", 3)
+
+    # ---- Security: traffic ----
+    # Only set behind a proxy you control; otherwise clients can forge
+    # X-Forwarded-For and each request looks like a new IP.
+    TRUST_PROXY = _bool("DS_TRUST_PROXY")
+    RATE_LIMIT = _int("DS_RATE_LIMIT", 5)              # requests per client
+    RATE_WINDOW_SECONDS = _int("DS_RATE_WINDOW", 60)   # per this window
+    MAX_CONCURRENT_ANALYSES = _int("DS_WORKERS", 2)    # CPU-bound, ~200 MB each
+    QUEUE_WAIT_SECONDS = _int("DS_QUEUE_WAIT", 20)
+
+    # ---- Security: housekeeping ----
+    UPLOAD_TTL_SECONDS = _int("DS_UPLOAD_TTL", 30 * 60)
+    CLEANUP_INTERVAL_SECONDS = _int("DS_CLEANUP_INTERVAL", 5 * 60)
+
     # ---- Inference tuning ----
     MAX_IMAGE_SIDE = _int("DS_MAX_IMAGE_SIDE", 1024)   # oversized inputs are unlike training data
     JPEG_NORMALISE_QUALITY = _int("DS_JPEG_QUALITY", 88)
@@ -82,8 +106,13 @@ class Config:
             "debug": cls.DEBUG,
             "force_echo": cls.FORCE_ECHO,
             "verifiers": cls.VERIFIERS,
+            "max_upload_mb": cls.MAX_UPLOAD_BYTES // (1024 * 1024),
             "max_url_mb": cls.MAX_URL_BYTES // (1024 * 1024),
-            "max_video_frames": cls.MAX_VIDEO_FRAMES,
+            "max_video_seconds": cls.MAX_VIDEO_SECONDS,
+            "rate_limit": f"{cls.RATE_LIMIT}/{cls.RATE_WINDOW_SECONDS}s",
+            "workers": cls.MAX_CONCURRENT_ANALYSES,
+            "allow_http_urls": cls.ALLOW_HTTP_URLS,
+            "upload_ttl_min": cls.UPLOAD_TTL_SECONDS // 60,
         }
 
 

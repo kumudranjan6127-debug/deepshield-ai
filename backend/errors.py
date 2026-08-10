@@ -56,6 +56,64 @@ def bad_field(field: str, expected: str):
     return ApiError("BAD_FIELD", f"{field} must be {expected}")
 
 
+# ---- Upload validation ----
+
+def empty_file():
+    return ApiError("EMPTY_FILE", "The file is empty")
+
+
+def bad_mime(mime: str):
+    return ApiError("BAD_MIME", f"Unsupported content type: {mime}")
+
+
+def bad_magic(ext: str):
+    # The name says one thing, the bytes say another.
+    return ApiError("BAD_MAGIC", f"File contents do not match a {ext.lstrip('.')} file")
+
+
+def corrupt_media(detail: str = "The file could not be decoded"):
+    return ApiError("CORRUPT_MEDIA", detail)
+
+
+def too_many_pixels(w: int, h: int):
+    return ApiError("IMAGE_TOO_LARGE", f"Image is too large to process ({w}×{h})")
+
+
+def too_small(w: int, h: int):
+    return ApiError("IMAGE_TOO_SMALL", f"Image is too small to analyze ({w}×{h})")
+
+
+def too_long(seconds: float, limit: int):
+    return ApiError("VIDEO_TOO_LONG",
+                    f"Video is {seconds:.0f}s; the limit is {limit}s")
+
+
+# ---- URL fetching ----
+
+def insecure_url():
+    return ApiError("INSECURE_URL", "Only https:// URLs are accepted")
+
+
+def blocked_url(reason: str):
+    # Deliberately vague to the caller, precise in the log: probing for
+    # internal hosts should not get a useful answer back.
+    log.warning("blocked url: %s", reason)
+    return ApiError("BLOCKED_URL", "That URL cannot be fetched")
+
+
+# ---- Traffic ----
+
+def rate_limited(retry_after: int):
+    e = ApiError("RATE_LIMITED",
+                 f"Too many requests — try again in {retry_after}s", 429)
+    e.retry_after = retry_after
+    return e
+
+
+def server_busy():
+    return ApiError("BUSY", "The server is busy analyzing — please retry shortly", 503)
+
+
 def _is_api() -> bool:
     return request.path.startswith("/api/")
 
@@ -66,7 +124,10 @@ def register(app):
     @app.errorhandler(ApiError)
     def _api_error(e: ApiError):
         log.info("%s %s -> %s: %s", request.method, request.path, e.code, e.message)
-        return jsonify(e.payload()), e.status
+        response = jsonify(e.payload())
+        if getattr(e, "retry_after", None):
+            response.headers["Retry-After"] = str(e.retry_after)
+        return response, e.status
 
     @app.errorhandler(ValueError)
     def _value_error(e: ValueError):
