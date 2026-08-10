@@ -9,6 +9,33 @@
     "arch": "mobilenet_v3_large",
     "architecture": "MobileNetV3-Large",
     "backend": "onnx",
+    "calibrated": false,
+    "certainty_bands": [
+     {
+      "from": 90,
+      "key": "very_strong",
+      "label": "Very strong evidence",
+      "to": 100
+     },
+     {
+      "from": 70,
+      "key": "strong",
+      "label": "Strong evidence",
+      "to": 90
+     },
+     {
+      "from": 30,
+      "key": "uncertain",
+      "label": "Uncertain",
+      "to": 70
+     },
+     {
+      "from": 0,
+      "key": "low_evidence",
+      "label": "Low evidence",
+      "to": 30
+     }
+    ],
     "checkpoint": "deepshield.onnx",
     "classes": [
      "fake",
@@ -61,6 +88,7 @@
   },
   "POST /api/analyze (metadata only)": {
    "body": {
+    "certainty": "strong",
     "completedAt": "<str>",
     "confidence": 72,
     "device": "CPU",
@@ -69,12 +97,14 @@
     "ok": true,
     "prediction": "deepfake",
     "processingTime": "<int>",
+    "risk": "medium",
     "riskLevel": "Medium"
    },
    "status": 200
   },
   "POST /api/analyze (multipart)": {
    "body": {
+    "certainty": "very_strong",
     "completedAt": "<str>",
     "confidence": 98,
     "device": "CPU",
@@ -90,19 +120,21 @@
      "focusRegion": "the mouth area",
      "heatmapDataUrl": "<str>",
      "method": "occlusion sensitivity",
-     "note": "Model attention concentrated around the mouth area."
+     "note": "Prediction was most sensitive to the mouth area."
     },
     "framesAnalyzed": 1,
     "model": "MobileNetV3-Large",
     "ok": true,
     "prediction": "deepfake",
     "processingTime": "<int>",
+    "risk": "high",
     "riskLevel": "High"
    },
    "status": 200
   },
   "POST /api/analyze (uploadId)": {
    "body": {
+    "certainty": "very_strong",
     "completedAt": "<str>",
     "confidence": 98,
     "device": "CPU",
@@ -118,13 +150,14 @@
      "focusRegion": "the mouth area",
      "heatmapDataUrl": "<str>",
      "method": "occlusion sensitivity",
-     "note": "Model attention concentrated around the mouth area."
+     "note": "Prediction was most sensitive to the mouth area."
     },
     "framesAnalyzed": 1,
     "model": "MobileNetV3-Large",
     "ok": true,
     "prediction": "deepfake",
     "processingTime": "<int>",
+    "risk": "high",
     "riskLevel": "High"
    },
    "status": 200

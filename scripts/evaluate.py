@@ -216,6 +216,8 @@ def report(rows, threshold, seen=None, target_fpr=0.01):
     print("=" * 70)
     print(sweep_table(rows))
 
+    calibration(rows)
+
     point = M.threshold_for_fpr(y, s, target_fpr)
     if point:
         t, fpr, recall = point
@@ -228,6 +230,37 @@ def report(rows, threshold, seen=None, target_fpr=0.01):
 
     if seen:
         cross_dataset(rows, threshold, seen)
+
+
+def calibration(rows):
+    """Whether the percentage the UI prints means anything.
+
+    Two questions, deliberately both asked. The first is about the raw
+    probability; the second is about the number a user is actually shown,
+    and it is the one that decides whether a certainty band deserves its
+    name."""
+    y, s = split(rows)
+
+    print("\n" + "=" * 70)
+    print("CALIBRATION  - is the number a frequency or just a ranking?")
+    print("=" * 70)
+    print(M.format_calibration(y, s, mode="positive"))
+    print()
+    print(M.format_calibration(y, s, mode="confidence"))
+
+    try:
+        sys.path.insert(0, os.path.join(ROOT, "backend"))
+        from config import CFG
+    except Exception:
+        return
+
+    print("\n" + "=" * 70)
+    print("CERTAINTY BANDS  - the labels against what actually happened")
+    print("=" * 70)
+    print(M.format_bands(M.band_accuracy(y, s, CFG.CERTAINTY_BANDS)))
+    print("\n  A band whose observed accuracy is far from its name is a band")
+    print("  whose cut point is wrong. These are the numbers that should")
+    print("  replace CERTAINTY_BANDS in backend/config.py.")
 
 
 def cross_dataset(rows, threshold, seen):

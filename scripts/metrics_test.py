@@ -19,9 +19,12 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
 
-from ds_metrics import (confusion, evaluate, pr_auc, roc_auc, sweep,  # noqa: E402
+from ds_metrics import (band_accuracy, brier, confusion, ece,  # noqa: E402
+                        evaluate, mce, pr_auc, reliability, roc_auc, sweep,
                         threshold_for_fpr)
 
 PASS, FAIL = [], []
@@ -227,6 +230,97 @@ def test_threshold_for_fpr():
           got is not None and got[2] >= 0.75, str(got))
 
 
+def test_calibration():
+    print("\nCalibration, against answers worked out by hand")
+
+    # Right, and sure about it
+    check("perfect + confident: Brier 0", close(brier([1, 1, 0, 0], [1, 1, 0, 0]), 0.0))
+    check("perfect + confident: ECE 0", close(ece([1, 1, 0, 0], [1, 1, 0, 0]), 0.0))
+
+    # Wrong, and just as sure
+    check("maximally wrong: Brier 1", close(brier([1, 1, 0, 0], [0, 0, 1, 1]), 1.0))
+    check("maximally wrong: ECE 1", close(ece([1, 1, 0, 0], [0, 0, 1, 1]), 1.0))
+
+    # Answering 0.5 to a 50/50 set is useless but perfectly calibrated —
+    # calibration and discrimination are not the same thing, and this is
+    # the case that proves it.
+    y, s = [1, 1, 0, 0], [0.5, 0.5, 0.5, 0.5]
+    check("all-0.5 on a balanced set: Brier 0.25", close(brier(y, s), 0.25))
+    check("all-0.5 on a balanced set: ECE 0 (calibrated but useless)",
+          close(ece(y, s), 0.0), f"ROC-AUC is {roc_auc(y, s)}")
+
+    # Claimed 1.0, delivered 0.5
+    check("over-confident: Brier 0.5", close(brier([1, 0], [1.0, 1.0]), 0.5))
+    check("over-confident: ECE 0.5", close(ece([1, 0], [1.0, 1.0]), 0.5))
+
+    # Confidence mode: four predictions all reported at 0.9 confidence,
+    # three of them right -> claimed 0.90, delivered 0.75, gap 0.15
+    y, s = [1, 1, 1, 0], [0.9, 0.9, 0.9, 0.9]
+    got = ece(y, s, mode="confidence")
+    check("confidence mode: ECE 0.15", close(got, 0.15, 1e-9), str(got))
+
+    rows = reliability(y, s, mode="confidence")
+    check("confidence mode: one occupied bin", len(rows) == 1, str(len(rows)))
+    check("confidence mode: verdict correct 75% of the time",
+          close(rows[0]["observed"], 0.75))
+
+    # Properties
+    rng = np.random.default_rng(11)
+    for _ in range(50):
+        n = int(rng.integers(4, 80))
+        yy = rng.integers(0, 2, n)
+        ss = rng.random(n)
+        b = brier(yy, ss)
+        if not (0.0 <= b <= 1.0):
+            check("Brier stays within [0, 1]", False, str(b))
+            return
+        if ece(yy, ss) - mce(yy, ss) > 1e-12:
+            check("ECE never exceeds MCE", False)
+            return
+    check("Brier stays within [0, 1]  (50 random sets)", True)
+    check("ECE never exceeds MCE  (50 random sets)", True)
+
+    rows = reliability(rng.integers(0, 2, 60), rng.random(60), bins=10)
+    check("reliability bins account for every prediction",
+          sum(r["n"] for r in rows) == 60, str(sum(r["n"] for r in rows)))
+    check("empty input yields nothing to plot", reliability([], []) == [])
+    check("empty input has no Brier score", brier([], []) is None)
+
+
+def test_certainty_bands():
+    print("\nCertainty bands measured against what happened")
+    sys.path.insert(0, os.path.join(ROOT, "backend"))
+    from config import CFG
+    bands = CFG.CERTAINTY_BANDS
+
+    #  y=1 p=.95 -> conf 95, fake, right     y=0 p=.95 -> conf 95, fake, WRONG
+    #  y=1 p=.75 -> conf 75, fake, right     y=1 p=.55 -> conf 55, fake, right
+    rows = band_accuracy([1, 0, 1, 1], [0.95, 0.95, 0.75, 0.55], bands)
+    by = {r["key"]: r for r in rows}
+    check("very_strong: 2 predictions, half right",
+          by["very_strong"]["n"] == 2 and close(by["very_strong"]["accuracy"], 0.5),
+          str(by["very_strong"]))
+    check("strong: 1 prediction, right", by["strong"]["n"] == 1 and
+          close(by["strong"]["accuracy"], 1.0))
+    check("uncertain: catches the 55% case", by["uncertain"]["n"] == 1)
+    check("an empty band reports None, not 0%",
+          by["low_evidence"]["n"] == 0 and by["low_evidence"]["accuracy"] is None)
+    check("every prediction lands in exactly one band",
+          sum(r["n"] for r in rows) == 4)
+
+    # The structural finding: a two-class confidence is max(p, 1-p), so it
+    # cannot go below 50 — the bottom band is unreachable by construction,
+    # whatever the model does.
+    rng = np.random.default_rng(3)
+    rows = band_accuracy(rng.integers(0, 2, 4000), rng.random(4000), bands)
+    by = {r["key"]: r for r in rows}
+    check("low_evidence (0-30) never occurs, on any input",
+          by["low_evidence"]["n"] == 0,
+          f"{by['low_evidence']['n']} of 4000")
+    check("uncertain only ever holds the 50-70 half of its range",
+          by["uncertain"]["n"] > 0, f"n={by['uncertain']['n']}")
+
+
 def main():
     print("DeepShield metric tests")
     test_hand_computed()
@@ -235,6 +329,8 @@ def main():
     test_rank_invariance()
     test_degenerate()
     test_threshold_for_fpr()
+    test_calibration()
+    test_certainty_bands()
 
     total = len(PASS) + len(FAIL)
     print("\n" + "=" * 52)

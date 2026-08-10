@@ -92,7 +92,7 @@ function renderReport(scan) {
   set('verdict-text', isFake ? 'LIKELY DEEPFAKE' : 'LIKELY REAL');
   set('verdict-conf', `${scan.confidence}%`);
 
-  /* 2b. Analyzed media — photo + Grad-CAM heatmap (when available) */
+  /* 2b. Analyzed media — photo + sensitivity heatmap (when available) */
   const photo = scan.previewDataUrl || null;
   const heat = (scan.explain && scan.explain.heatmapDataUrl) || null;
 

@@ -198,6 +198,10 @@ def health():
         "status": "ok",
         "engine": "live" if live else "echo",
         "model": model_identity(),
+        # The frontend labels confidence numbers with these, rather than
+        # keeping its own copy of the thresholds.
+        "certainty_bands": inference.certainty_bands(),
+        "calibrated": False,   # no reliability curve has ever been measured
         **inference.engine_info(),
     })
 
@@ -342,7 +346,12 @@ def analyze():
             "ok": True,
             "prediction": prediction,
             "confidence": confidence,
+            # `riskLevel` is what every page already reads; `risk` and
+            # `certainty` are additive. `certainty` is the honest reading of
+            # the number — evidence strength, not a probability.
             "riskLevel": inference.risk_for(prediction, confidence),
+            "risk": inference.risk_for(prediction, confidence).lower(),
+            "certainty": inference.certainty_for(confidence),
             "framesAnalyzed": frames,
             "processingTime": int((time.perf_counter() - started) * 1000),
             "model": identity["name"],

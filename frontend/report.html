@@ -184,12 +184,12 @@
             </div>
             <div class="verdict-side">
               <span class="verdict-conf mono" id="verdict-conf">—</span>
-              <span class="verdict-conf-label">Model confidence</span>
+              <span class="verdict-conf-label">Detection confidence</span>
             </div>
             <span class="badge badge-warning" id="risk-badge">— risk</span>
           </div>
 
-          <!-- 2b. Analyzed media (photo + attention heatmap) — hidden when
+          <!-- 2b. Analyzed media (photo + sensitivity heatmap) — hidden when
                the scan carries no imagery (URL scans / cleared history) -->
           <section class="doc-section" id="media-section" aria-label="Analyzed media" hidden>
             <h2 class="eyebrow doc-section-title">Analyzed media</h2>
@@ -199,8 +199,8 @@
                 <figcaption>Submitted media</figcaption>
               </figure>
               <figure id="doc-heat-wrap" hidden>
-                <img id="doc-heatmap" alt="Model attention heatmap">
-                <figcaption>Model attention (Grad-CAM)</figcaption>
+                <img id="doc-heatmap" alt="Occlusion-sensitivity heatmap">
+                <figcaption>Occlusion sensitivity &mdash; regions that changed the prediction most</figcaption>
               </figure>
             </div>
             <p class="text-xs text-3" id="doc-focus" hidden></p>

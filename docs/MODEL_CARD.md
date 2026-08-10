@@ -142,6 +142,42 @@ Read it for what it is: **5 images, one generator, no real photographs**. It
 shows the preprocessing is not fragile. It says nothing about the
 false-positive rate, and nothing about any other generator.
 
+### Calibration — what the percentage is allowed to claim
+
+**Unmeasured.** No ECE, Brier score or reliability curve has ever been
+computed for this model, so the confidence percentage carries no
+probabilistic promise. `/api/health` says so directly: `"calibrated": false`.
+
+The distinction the project now holds to:
+
+| Question | Answered by | Status |
+|---|---|---|
+| Does it rank fakes above reals? | ROC-AUC | measurable, tooling ready |
+| When it says 0.9, is it right 90% of the time? | ECE, Brier, reliability | **never measured** |
+
+A network trained with cross-entropy and selected on validation accuracy is
+usually over-confident, so the honest assumption is that 0.97 overstates the
+evidence. That is the reason for the wording change:
+
+> ~~97% probability this image is fake~~
+> **Detection confidence: 97% — very strong evidence**
+
+The verdict carries a `certainty` band alongside `confidence`:
+
+| Band | Confidence | Reachable |
+|---|---|---|
+| `very_strong` | 90–100 | yes |
+| `strong` | 70–90 | yes |
+| `uncertain` | 30–70 | only 50–70 |
+| `low_evidence` | 0–30 | **never** |
+
+`confidence` is `max(p, 1−p)` for two classes, so it cannot fall below 50 and
+the bottom band is unreachable. The cut points are **provisional** — they are
+the values specified for Phase 5, not values derived from data. They live in
+`backend/config.py`, are published by `/api/health` so the frontend never
+holds a copy, and `scripts/evaluate.py` prints the observed accuracy and
+occupancy of each band so they can be replaced with measured ones.
+
 ### How the numbers are produced
 
 ```
@@ -198,12 +234,21 @@ and test-time augmentation over the image and its mirror.
 blanked in turn and the drop in the winning class's score is recorded. Cells
 whose removal moves the score most are the ones the model relied on. The
 result is rendered as a heatmap, and the hottest cell is matched to the
-nearest YuNet landmark to produce a grounded sentence such as *"Model
-attention concentrated around the eye region."*
+nearest YuNet landmark to produce a grounded sentence: *"Prediction was most
+sensitive to the eye region."*
 
-This reports **where** the model looked, never **what** is wrong with the face.
-It needs only forward passes, so it behaves identically on both backends —
-Grad-CAM, used previously, requires gradients the ONNX runtime cannot provide.
+**That sentence used to read "Model attention concentrated around the eye
+region", and it was wrong.** Occlusion sensitivity does not observe
+attention. It hides a patch and measures how far the output moves — a
+statement about the *prediction*, not about the network's internals. The two
+can disagree: a region the model never attends to can still swing the score
+because hiding it changes the image statistics. The UI called the heatmap
+"Grad-CAM" as well, which it has never been. Both are corrected.
+
+So this reports **which regions the prediction depended on**, never **what is
+wrong with the face**. It needs only forward passes, so it behaves identically
+on both backends — Grad-CAM requires gradients the ONNX runtime cannot
+provide.
 
 ---
 

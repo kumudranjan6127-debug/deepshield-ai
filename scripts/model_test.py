@@ -174,11 +174,76 @@ def test_parity():
           f"{worst:.2e} < {PARITY_THRESHOLD}")
 
 
+# ------------------------------------------------------------------ bands
+
+def test_certainty():
+    """The band table is a public vocabulary. It has to be total (every
+    confidence gets a word), unambiguous (exactly one word), and the same
+    everywhere it is published."""
+    import inference
+    from config import CFG
+
+    print("\nCertainty bands — one word per confidence, everywhere")
+
+    bands = inference.certainty_bands()
+    check("bands are published", len(bands) == len(CFG.CERTAINTY_BANDS),
+          f"{len(bands)} bands")
+
+    # Contiguous and covering: sorted high to low, each band starts where
+    # the one above it ended.
+    edges_ok = all(bands[i]["to"] == bands[i - 1]["from"] for i in range(1, len(bands)))
+    check("bands are contiguous — no gap between them", edges_ok,
+          " ".join(f"{b['from']}-{b['to']}" for b in bands))
+    check("bands span the whole 0-100 range",
+          bands[0]["to"] == 100 and bands[-1]["from"] == 0)
+
+    # Total and unambiguous over every confidence the API can emit
+    unmatched, ambiguous = [], []
+    for c in range(0, 101):
+        key = inference.certainty_for(c)
+        owners = [b for b in bands
+                  if b["from"] <= c and (c < b["to"] or b["to"] == 100)]
+        if not owners:
+            unmatched.append(c)
+        elif len({b["key"] for b in owners}) > 1:
+            ambiguous.append(c)
+        elif owners[0]["key"] != key:
+            ambiguous.append(c)
+    check("every confidence 0-100 maps to exactly one band",
+          not unmatched and not ambiguous,
+          f"unmatched={unmatched[:5]} disagreeing={ambiguous[:5]}")
+
+    # Published identically by the API
+    import app
+    with app.app.test_client() as client:
+        health = client.get("/api/health").get_json()
+    check("/api/health publishes the same table",
+          health.get("certainty_bands") == bands)
+    check("/api/health admits the model is not calibrated",
+          health.get("calibrated") is False, str(health.get("calibrated")))
+
+    # And a real verdict agrees with its own confidence
+    if inference.engine_available():
+        path = sample_images()[0]
+        result = inference.analyze_file(path, "image")
+        expected = inference.certainty_for(result["confidence"])
+        check("an analysed image's band matches its confidence",
+              expected == inference.certainty_for(result["confidence"]),
+              f"confidence {result['confidence']} -> {expected}")
+
+        with app.app.test_request_context():
+            risk = inference.risk_for(result["prediction"], result["confidence"])
+        check("risk and certainty are independent labels",
+              risk in ("Low", "Medium", "High") and expected in
+              {b["key"] for b in bands}, f"risk={risk} certainty={expected}")
+
+
 def main():
     print("DeepShield model tests")
     test_identity()
     test_reproducibility()
     test_parity()
+    test_certainty()
 
     total = len(PASS) + len(FAIL)
     print("\n" + "=" * 52)

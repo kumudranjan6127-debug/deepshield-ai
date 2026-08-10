@@ -35,6 +35,11 @@ DS.api = {
     backend: '—',
   },
 
+  /* Certainty bands, filled from /api/health. Empty until then, and
+     deliberately so: the browser must never hold its own opinion about
+     where "strong evidence" begins. */
+  CERTAINTY: [],
+
   /**
    * Analyze a scan.
    * @param {object} scan  {id, fileName, fileType: 'image'|'video', fileSize, source}

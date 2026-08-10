@@ -93,6 +93,28 @@ class Config:
     OWN_WEIGHT = 0.75                                  # verifiers share the remainder
     VERIFIER_OVERRULE_AT = 0.85                        # and only when they all agree
 
+    # ---- How a confidence number is allowed to be described ----
+    # A percentage invites the reading "94% probability this is fake". It is
+    # not that: it is how strongly this model separated this image, and the
+    # model has never been calibrated, so the number carries no probabilistic
+    # promise. These bands turn it into a claim about *evidence strength*,
+    # which is what it can honestly support.
+    #
+    # PROVISIONAL. The cut points below are the ones specified for Phase 5,
+    # not ones derived from data — nothing has been measured that would
+    # justify 70 over 75. `scripts/evaluate.py` prints the observed accuracy
+    # and occupancy of each band; replace these with the measured values as
+    # soon as there is a labelled set to measure on. Until then, treat the
+    # boundaries as a vocabulary, not a finding.
+    #
+    # (lower bound inclusive, key, human label)
+    CERTAINTY_BANDS = (
+        (90, "very_strong", "Very strong evidence"),
+        (70, "strong",      "Strong evidence"),
+        (30, "uncertain",   "Uncertain"),
+        (0,  "low_evidence", "Low evidence"),
+    )
+
     @classmethod
     def ensure_dirs(cls):
         os.makedirs(cls.UPLOAD_DIR, exist_ok=True)

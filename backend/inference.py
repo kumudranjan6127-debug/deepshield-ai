@@ -57,6 +57,31 @@ def risk_for(prediction: str, confidence: int) -> str:
         return "High" if confidence >= 85 else "Medium"
     return "Low" if confidence >= 80 else "Medium"
 
+
+def certainty_for(confidence: int) -> str:
+    """How strong the evidence is — not how probable the verdict is.
+
+    The distinction matters. `confidence` is the winning class's softmax
+    output, and softmax outputs are not probabilities unless the model has
+    been calibrated, which this one has not. Saying "94% chance it is fake"
+    claims a frequency nobody has measured. Saying "very strong evidence"
+    claims a ranking, which is what the number actually supports.
+
+    Bands live in config so the API, the UI and the evaluation harness all
+    read the same table."""
+    for lower, key, _label in CFG.CERTAINTY_BANDS:
+        if confidence >= lower:
+            return key
+    return CFG.CERTAINTY_BANDS[-1][1]
+
+
+def certainty_bands() -> list:
+    """The band table, for anything that has to label a number it was
+    given — so no threshold is ever written down twice."""
+    return [{"from": lower, "to": (CFG.CERTAINTY_BANDS[i - 1][0] if i else 100),
+             "key": key, "label": label}
+            for i, (lower, key, label) in enumerate(CFG.CERTAINTY_BANDS)]
+
 # ---- Ensemble: pretrained HuggingFace verifiers (images only) ----
 # OPT-IN (DS_VERIFIERS=1). They mattered when our model was blind to
 # StyleGAN2, but V3 covers those fakes itself and scores every image in
@@ -449,7 +474,7 @@ class _Engine:
             "heatmapDataUrl": data_url,
             "focusRegion": region,
             "method": "occlusion sensitivity",
-            "note": f"Model attention concentrated around {region}.",
+            "note": f"Prediction was most sensitive to {region}.",
         }
 
     # ---- probs → (prediction, confidence)
@@ -579,7 +604,7 @@ def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
             except Exception:
                 pass
 
-        # Explainability (Grad-CAM heatmap + grounded focus text) —
+        # Explainability (occlusion-sensitivity heatmap + grounded text) —
         # best-effort: any failure just omits the section
         try:
             explain = eng.explain(face, landmarks)

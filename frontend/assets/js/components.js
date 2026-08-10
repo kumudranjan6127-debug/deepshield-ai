@@ -153,6 +153,7 @@ DS.server = {
     // The server reports what it actually loaded; the browser never maps
     // an architecture to a name itself.
     Object.assign(DS.api.MODEL, health.model || {});
+    if (Array.isArray(health.certainty_bands)) DS.api.CERTAINTY = health.certainty_bands;
 
     const fill = (attr, value) =>
       DS.util.qsa(`[${attr}]`).forEach(el => { el.textContent = value; });

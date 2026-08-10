@@ -6,7 +6,7 @@ recorded in this document.
 
 | | |
 |---|---|
-| Snapshot date | 2026-08-10 (updated after Phase 4) |
+| Snapshot date | 2026-08-10 (updated after Phase 5) |
 | Commit | `ab0103d983ed5b272f964ee3cc750a91116b3c8c` (`ab0103d`) |
 | Commit subject | Run the model as ONNX: 1.9 GB backend becomes 197 MB |
 | Branch | `main`, clean working tree, 31 commits |
@@ -135,6 +135,13 @@ final verdict.
   "dfdc_accuracy": null,
   "trained_on": "V3-Max multi-generator: SG1 + TPDN/SG2 + diffusion, 10 epochs, large",
   "verifiers": false,
+  "calibrated": false,
+  "certainty_bands": [
+    { "from": 90, "to": 100, "key": "very_strong",  "label": "Very strong evidence" },
+    { "from": 70, "to":  90, "key": "strong",       "label": "Strong evidence" },
+    { "from": 30, "to":  70, "key": "uncertain",    "label": "Uncertain" },
+    { "from":  0, "to":  30, "key": "low_evidence", "label": "Low evidence" }
+  ],
   "model": {
     "model_name": "DeepShield", "architecture": "MobileNetV3-Large",
     "version": "V3-Max", "runtime": "ONNX", "input_size": 224,
@@ -161,6 +168,8 @@ Live response for an image (heatmap abbreviated):
   "prediction": "real",
   "confidence": 94,
   "riskLevel": "Low",
+  "risk": "low",
+  "certainty": "very_strong",
   "framesAnalyzed": 1,
   "processingTime": 831,
   "model": "MobileNetV3-Large",
@@ -171,7 +180,7 @@ Live response for an image (heatmap abbreviated):
   "explain": {
     "focusRegion": "the eye region",
     "method": "occlusion sensitivity",
-    "note": "Model attention concentrated around the eye region.",
+    "note": "Prediction was most sensitive to the eye region.",
     "heatmapDataUrl": "data:image/jpeg;base64,… (11,291 chars)"
   }
 }
@@ -181,6 +190,11 @@ Live response for an image (heatmap abbreviated):
 - `prediction` ∈ `"real" | "deepfake"`; `confidence` is an integer percent of
   the winning class; `riskLevel` ∈ `"Low" | "Medium" | "High"`.
 - `ensemble[0]` is always our own model. `pFake` is its raw probability.
+- `certainty` is the evidence band for `confidence`; `risk` is `riskLevel`
+  lowercased. Both are additive — `riskLevel` is what the pages read, and
+  the band table is published by `/api/health` so no threshold is written
+  down in the browser. The model is uncalibrated, so `confidence` ranks
+  evidence and does not estimate a frequency.
 - `explain` is absent for video scans and may be `null` if the heatmap fails.
 - `POST /api/feedback` requires a boolean `agree`; anything else returns 400.
 - Failures share one shape: `{"ok": false, "error": "…", "error_code": "…"}`.
@@ -370,8 +384,8 @@ python scripts/split_test.py                      the V4 split cannot leak
 |---|---|---|---|
 | regression | 23 | Engine outputs and every API response, field by field | yes |
 | security | 50 | SSRF (v4/v6/DNS/redirects), oversized, forged extension, corrupt and empty media, malformed URLs, rate limit, concurrency, cleanup | yes |
-| model | 32 | Identity agrees across file/engine/API; repeated runs identical; ONNX vs PyTorch within 1e-4 (measured 3.2e-08) | no |
-| metrics | 40 | Hand-computed answers, plus ROC-AUC against brute-force pair counting and PR-AUC against a threshold walk | no |
+| model | 40 | Identity agrees across file/engine/API; repeated runs identical; ONNX vs PyTorch within 1e-4 (measured 3.2e-08); certainty bands total, unambiguous and published identically | no |
+| metrics | 63 | Hand-computed answers, plus ROC-AUC against brute-force pair counting, PR-AUC against a threshold walk, and calibration (Brier/ECE/MCE) against worked examples | no |
 | split | 24 | Lifts the DFDC split out of the V4 notebook and runs it on a synthetic set whose leakage structure is known | no |
 
 The regression baseline lives in `docs/regression_baseline.json`. Live
@@ -391,8 +405,15 @@ python scripts/evaluate.py --from-csv preds.csv   re-score a training run
 python scripts/evaluate.py --conditions DIR       phone/screenshot/social variants
 ```
 
+The report has four parts: the metric block, a per-source table, a threshold
+sweep, and a **calibration** section — reliability diagram, ECE, MCE, Brier,
+plus the observed accuracy and occupancy of every certainty band. That last
+table is how a band label stops being a guess: a band called "Strong
+evidence" that is right 61% of the time has the wrong cut point, and an empty
+band cannot be produced at all.
+
 `ds_metrics.py` holds the arithmetic — accuracy, precision, recall, F1,
-specificity, ROC-AUC, PR-AUC, FPR, FNR — and nothing else computes a metric,
+specificity, ROC-AUC, PR-AUC, FPR, FNR, Brier, ECE, MCE — and nothing else computes a metric,
 including the training notebook. The notebook emits raw scores as
 `predictions_*.csv`; `--from-csv` turns them into the report. Kaggle numbers
 and local numbers are therefore the same arithmetic, and any published figure

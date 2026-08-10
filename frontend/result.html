@@ -163,19 +163,21 @@
             <!-- Verdict hero -->
             <section class="card card-pad-lg verdict-card fade-up" data-delay="1" aria-label="Verdict">
               <div class="ring-wrap">
-                <svg class="confidence-ring" id="conf-ring" viewBox="0 0 180 180" role="img" aria-label="Confidence">
+                <svg class="confidence-ring" id="conf-ring" viewBox="0 0 180 180" role="img" aria-label="Detection confidence">
                   <circle class="ring-track" cx="90" cy="90" r="80"></circle>
                   <circle class="ring-value" id="ring-value" cx="90" cy="90" r="80"></circle>
                 </svg>
                 <div class="ring-center">
                   <span class="ring-pct mono" id="conf-pct">—</span>
-                  <span class="text-xs text-3">confidence</span>
+                  <span class="text-xs text-3">detection confidence</span>
                 </div>
               </div>
 
               <span class="badge verdict-badge" id="verdict-badge"><!-- filled by result.js --></span>
               <span class="badge" id="risk-chip"><!-- filled by result.js --></span>
+              <span class="badge" id="certainty-chip" hidden><!-- filled by result.js --></span>
               <p class="text-2 text-sm verdict-note" id="verdict-note"></p>
+              <p class="text-xs text-3" id="verdict-caveat">A detection confidence score, not a probability that the media is fake &mdash; this model has not been calibrated.</p>
             </section>
 
             <!-- Analysis insights (explainability) — filled by result.js,
@@ -186,8 +188,8 @@
 
               <div class="insight-flex">
                 <figure class="insight-heat" id="insight-heat" hidden>
-                  <img id="heatmap-img" alt="Model attention heatmap over the analyzed face">
-                  <figcaption class="text-xs text-3">Model attention (Grad-CAM)</figcaption>
+                  <img id="heatmap-img" alt="Occlusion-sensitivity heatmap over the analyzed face">
+                  <figcaption class="text-xs text-3">Occlusion sensitivity &mdash; regions that changed the prediction most</figcaption>
                 </figure>
 
                 <div class="insight-side">

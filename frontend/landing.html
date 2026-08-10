@@ -137,7 +137,7 @@
           </svg>
           <span class="heat-blob"></span>
         </div>
-        <span class="text-xs">Attention: eye region</span>
+        <span class="text-xs">Most sensitive: eye region</span>
       </div>
 
       <div class="mock-float mock-speed">
@@ -307,14 +307,14 @@
         including when they disagree.
       </p>
       <ul class="lp-list" role="list">
-        <li><i data-lucide="check" class="icon-sm"></i> Grad-CAM attention map over the analyzed face</li>
+        <li><i data-lucide="check" class="icon-sm"></i> Sensitivity map showing which regions changed the prediction</li>
         <li><i data-lucide="check" class="icon-sm"></i> Per-model confidence, side by side</li>
         <li><i data-lucide="check" class="icon-sm"></i> An honest "models disagreed" flag</li>
         <li><i data-lucide="check" class="icon-sm"></i> Everything included in the PDF report</li>
       </ul>
     </div>
 
-    <!-- Drag-to-compare: photo on the left, model attention on the right -->
+    <!-- Drag-to-compare: photo on the left, sensitivity map on the right -->
     <div class="lp-explain-visual reveal" data-delay="1">
       <div class="ex-card">
         <div class="ex-compare" id="ex-compare">
@@ -333,13 +333,13 @@
           </div>
           <span class="ex-handle" id="ex-handle" aria-hidden="true"></span>
 
-          <label class="ex-slider-label" for="ex-slider">Reveal model attention</label>
+          <label class="ex-slider-label" for="ex-slider">Reveal sensitivity map</label>
           <input type="range" class="ex-slider" id="ex-slider" min="0" max="100" value="52"
-                 aria-label="Reveal model attention">
+                 aria-label="Reveal sensitivity map">
         </div>
         <p class="ex-note text-xs">
           <i data-lucide="scan-face" class="icon-sm"></i>
-          Drag — attention concentrated around the eye region.
+          Drag — the prediction was most sensitive to the eye region.
         </p>
       </div>
     </div>

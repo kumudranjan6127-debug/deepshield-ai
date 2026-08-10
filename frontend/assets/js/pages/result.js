@@ -35,9 +35,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Model facts arrive from /api/health — repaint the card when they land
   document.addEventListener('ds:server-ready', renderModel);
+  /* Bands arrive with health, which may land after the verdict is drawn. */
+  document.addEventListener('ds:server-ready', renderCertainty);
 });
 
-/* ---- Analysis insights: judge votes + Grad-CAM heatmap ---- */
+/* ---- Analysis insights: judge votes + sensitivity heatmap ---- */
 function renderInsights(scan) {
   const card = document.getElementById('insights-card');
   const votes = Array.isArray(scan.ensemble)
@@ -127,6 +129,44 @@ function renderModel() {
   `;
 }
 
+/* ---- Certainty band ----
+   The band table comes from /api/health, so no threshold is written down
+   in the browser and the UI can never disagree with the backend about
+   where "strong evidence" begins. A verdict analysed before Phase 5 has
+   no `certainty` field, so its band is looked up from the confidence it
+   was saved with — using the server's boundaries, not local ones. When
+   there is no backend to ask, the chip simply stays hidden rather than
+   guessing a label. */
+let verdictCtx = null;
+
+function bandFor(scan, confidence) {
+  const bands = DS.api.CERTAINTY || [];
+  if (!bands.length) return null;
+  return (scan.certainty && bands.find(b => b.key === scan.certainty))
+      || bands.find(b => confidence >= b.from)
+      || null;
+}
+
+function renderCertainty() {
+  if (!verdictCtx) return;
+  const { scan, confidence, isFake, unit } = verdictCtx;
+  const band = bandFor(scan, confidence);
+
+  const chip = document.getElementById('certainty-chip');
+  if (chip && band) {
+    chip.textContent = band.label;
+    chip.hidden = false;
+  }
+
+  /* "Detection confidence 94%" — never "94% probability it is fake". The
+     model is uncalibrated, so the number ranks evidence; it does not
+     estimate a frequency. */
+  const strength = band ? ` — ${band.label.toLowerCase()}` : '';
+  document.getElementById('verdict-note').textContent = isFake
+    ? `Detection confidence ${confidence}%${strength}. Patterns consistent with synthetic manipulation were found across the analyzed ${unit}.`
+    : `Detection confidence ${confidence}%${strength}. No manipulation artifacts were found across the analyzed ${unit}.`;
+}
+
 /* ---- Verdict hero: ring, badge, risk chip, explanation ---- */
 function renderVerdict(scan, isFake, isVideo) {
   const confidence = Math.max(0, Math.min(100, Math.round(scan.confidence || 0)));
@@ -138,7 +178,7 @@ function renderVerdict(scan, isFake, isVideo) {
   ring.style.strokeDasharray = String(C);
   ring.style.strokeDashoffset = String(C);
   document.getElementById('conf-ring')
-    .setAttribute('aria-label', `Confidence ${confidence}%`);
+    .setAttribute('aria-label', `Detection confidence ${confidence}%`);
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -164,12 +204,10 @@ function renderVerdict(scan, isFake, isVideo) {
   chip.classList.add(riskClass);
   chip.textContent = `Risk level: ${risk}`;
 
-  /* One-sentence explanation, qualitative confidence */
-  const qual = confidence >= 85 ? 'high' : 'moderate';
-  const unit = isVideo ? 'frames' : 'regions';
-  document.getElementById('verdict-note').textContent = isFake
-    ? `The model detected patterns consistent with synthetic manipulation across the analyzed ${unit}, with ${qual} confidence.`
-    : `No significant manipulation artifacts were detected across the analyzed ${unit} — the model reports ${qual} confidence in this verdict.`;
+  /* Certainty band + one-sentence explanation. The wording is the
+     server's, not ours — see renderCertainty. */
+  verdictCtx = { scan, confidence, isFake, unit: isVideo ? 'frames' : 'regions' };
+  renderCertainty();
 
   DS.icons();
 }

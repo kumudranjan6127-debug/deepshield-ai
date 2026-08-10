@@ -22,7 +22,9 @@ be a lie that looks like a measurement.
 import numpy as np
 
 __all__ = ["confusion", "roc_auc", "pr_auc", "evaluate", "sweep",
-           "threshold_for_fpr", "format_report"]
+           "threshold_for_fpr", "format_report",
+           "brier", "reliability", "ece", "mce", "format_calibration",
+           "band_accuracy", "format_bands"]
 
 DEFAULT_THRESHOLD = 0.5
 
@@ -153,6 +155,111 @@ def threshold_for_fpr(y_true, score, target_fpr=0.01):
     return None
 
 
+# -------------------------------------------------------------- calibration
+#
+# Discrimination and calibration are different questions, and a model can
+# be excellent at one while useless at the other.
+#
+#   ROC-AUC asks: does it rank fakes above reals?
+#   Calibration asks: when it says 0.9, is it right 90% of the time?
+#
+# A model trained with cross-entropy and picked by validation accuracy is
+# usually badly calibrated and badly overconfident. That is exactly why the
+# UI should not say "94% probability" — until the numbers below are
+# measured, the percentage is a ranking dressed up as a frequency.
+
+def brier(y_true, score):
+    """Mean squared error of the probability. 0 is perfect; 0.25 is what
+    you get by answering 0.5 to everything, so anything above 0.25 is
+    worse than admitting you do not know."""
+    y, s = _clean(y_true, score)
+    return float(((s - y) ** 2).mean()) if y.size else None
+
+
+def reliability(y_true, score, bins=10, mode="positive"):
+    """Rows of a reliability diagram — the data behind ECE.
+
+    mode='positive'    bin by P(fake); compare it to how often those were
+                       actually fake. The classic diagram.
+    mode='confidence'  bin by max(p, 1-p) — the number the UI shows —
+                       and compare it to how often the verdict was right.
+                       This is the one that validates the certainty bands.
+
+    → [{lo, hi, n, mean_score, observed, gap}]; empty bins are dropped.
+    """
+    y, s = _clean(y_true, score)
+    if not y.size:
+        return []
+
+    if mode == "confidence":
+        value = np.maximum(s, 1 - s)
+        correct = ((s >= 0.5).astype(int) == y).astype(float)
+        lo_edge = 0.5                      # a two-class confidence cannot go lower
+    elif mode == "positive":
+        value, correct, lo_edge = s, y.astype(float), 0.0
+    else:
+        raise ValueError("mode must be 'positive' or 'confidence'")
+
+    edges = np.linspace(lo_edge, 1.0, bins + 1)
+    rows = []
+    for i in range(bins):
+        lo, hi = edges[i], edges[i + 1]
+        # last bin closes on the right so a score of exactly 1.0 is counted
+        inside = (value >= lo) & (value < hi) if i < bins - 1 else \
+                 (value >= lo) & (value <= hi)
+        n = int(inside.sum())
+        if not n:
+            continue
+        mean_score = float(value[inside].mean())
+        observed = float(correct[inside].mean())
+        rows.append({"lo": float(lo), "hi": float(hi), "n": n,
+                     "mean_score": mean_score, "observed": observed,
+                     "gap": observed - mean_score})
+    return rows
+
+
+def ece(y_true, score, bins=10, mode="positive"):
+    """Expected calibration error — the average gap between what was
+    claimed and what happened, weighted by how many predictions landed in
+    each bin."""
+    rows = reliability(y_true, score, bins, mode)
+    total = sum(r["n"] for r in rows)
+    if not total:
+        return None
+    return float(sum(r["n"] * abs(r["gap"]) for r in rows) / total)
+
+
+def mce(y_true, score, bins=10, mode="positive"):
+    """The worst bin. ECE can look healthy while one region is far out."""
+    rows = reliability(y_true, score, bins, mode)
+    return max((abs(r["gap"]) for r in rows), default=None)
+
+
+def band_accuracy(y_true, score, bands):
+    """Observed accuracy inside each certainty band.
+
+    `bands` is the table the product actually uses — [(lower, key, label)],
+    highest first. This is how a band label stops being a guess: if the
+    band called "Strong evidence" is right 61% of the time, the label is
+    wrong and the cut point moves.
+
+    → [{key, label, from, to, n, accuracy}] in the order given.
+    """
+    y, s = _clean(y_true, score)
+    confidence = np.round(np.maximum(s, 1 - s) * 100).astype(int)
+    correct = (s >= 0.5).astype(int) == y
+
+    out = []
+    for i, (lower, key, label) in enumerate(bands):
+        upper = bands[i - 1][0] if i else 101
+        inside = (confidence >= lower) & (confidence < upper)
+        n = int(inside.sum())
+        out.append({"key": key, "label": label, "from": int(lower),
+                    "to": int(min(upper, 100)), "n": n,
+                    "accuracy": float(correct[inside].mean()) if n else None})
+    return out
+
+
 # ------------------------------------------------------------------ display
 
 def _pct(v):
@@ -180,3 +287,45 @@ def format_report(m, title=""):
         f"      FPR         {_pct(m['fpr'])}   real called fake",
         f"      FNR         {_pct(m['fnr'])}   fake called real",
     ]))
+
+
+def format_calibration(y_true, score, bins=10, mode="positive"):
+    """A reliability diagram that survives a terminal.
+
+    A perfectly calibrated model has an empty gap column. Bars point the
+    way the model was wrong: `<` claimed more than it delivered."""
+    rows = reliability(y_true, score, bins, mode)
+    if not rows:
+        return "    (no predictions to plot)"
+
+    claimed = "claimed P(fake)" if mode == "positive" else "reported confidence"
+    happened = "actually fake" if mode == "positive" else "verdict correct"
+
+    lines = [f"    {claimed:>19}        n   {happened:>16}       gap",
+             "    " + "-" * 72]
+    for r in rows:
+        bar = ("<" if r["gap"] < 0 else ">") * int(round(abs(r["gap"]) * 40))
+        lines.append(f"    {r['lo']:>8.2f} - {r['hi']:.2f} {r['n']:>8}   "
+                     f"{r['observed'] * 100:>15.1f}%   {r['gap']:+.3f}  {bar}")
+
+    e, m = ece(y_true, score, bins, mode), mce(y_true, score, bins, mode)
+    lines += ["",
+              f"    ECE {e:.4f}    MCE {m:.4f}    Brier {brier(y_true, score):.4f}",
+              "    '<' = over-confident: the model claimed more than happened."]
+    return "\n".join(lines)
+
+
+def format_bands(rows):
+    """Certainty bands against what actually happened inside them.
+
+    An empty band is worth as much attention as a wrong one: it means the
+    label can never be produced, and a vocabulary with unreachable words in
+    it is describing something other than this model."""
+    lines = ["    band                     range        n    accuracy",
+             "    " + "-" * 56]
+    for r in rows:
+        acc = "      n/a" if r["accuracy"] is None else f"{r['accuracy'] * 100:8.2f}%"
+        note = "" if r["n"] else "   <- never occurs"
+        lines.append(f"    {r['label']:22s} {r['from']:>3}-{r['to']:<4} {r['n']:>8}  "
+                     f"{acc}{note}")
+    return "\n".join(lines)
