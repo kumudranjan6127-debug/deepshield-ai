@@ -1,0 +1,241 @@
+{
+ "api": {
+  "GET /": {
+   "status": 200,
+   "type": "text/html"
+  },
+  "GET /api/health": {
+   "body": {
+    "arch": "mobilenet_v3_large",
+    "backend": "onnx",
+    "checkpoint": "deepshield.onnx",
+    "dfdc_accuracy": null,
+    "engine": "live",
+    "model": {
+     "backend": "onnx",
+     "device": "CPU",
+     "input": "224 \u00d7 224",
+     "name": "MobileNetV3-Large",
+     "params": "5.4M",
+     "version": "1.0.0"
+    },
+    "ok": true,
+    "status": "ok",
+    "test_accuracy": null,
+    "tpdn_accuracy": 100.0,
+    "trained_on": "V3-Max multi-generator: SG1 + TPDN/SG2 + diffusion, 10 epochs, large",
+    "val_accuracy": 99.9,
+    "verifiers": false
+   },
+   "status": 200
+  },
+  "GET /api/not-an-endpoint": {
+   "status": 404,
+   "type": "application/json"
+  },
+  "GET /assets/js/utils.js": {
+   "status": 200,
+   "type": "text/javascript"
+  },
+  "GET /dashboard.html": {
+   "status": 200,
+   "type": "text/html"
+  },
+  "GET /definitely-not-here.html": {
+   "status": 404,
+   "type": "text/html"
+  },
+  "POST /api/analyze (metadata only)": {
+   "body": {
+    "completedAt": "<str>",
+    "confidence": 72,
+    "device": "CPU",
+    "framesAnalyzed": 42,
+    "model": "MobileNetV3-Large",
+    "ok": true,
+    "prediction": "deepfake",
+    "processingTime": "<int>",
+    "riskLevel": "Medium"
+   },
+   "status": 200
+  },
+  "POST /api/analyze (multipart)": {
+   "body": {
+    "completedAt": "<str>",
+    "confidence": 98,
+    "device": "CPU",
+    "disputed": false,
+    "ensemble": [
+     {
+      "model": "MobileNetV3 (ours)",
+      "pFake": 0.9757,
+      "weight": 1.0
+     }
+    ],
+    "explain": {
+     "focusRegion": "the mouth area",
+     "heatmapDataUrl": "<str>",
+     "method": "occlusion sensitivity",
+     "note": "Model attention concentrated around the mouth area."
+    },
+    "framesAnalyzed": 1,
+    "model": "MobileNetV3-Large",
+    "ok": true,
+    "prediction": "deepfake",
+    "processingTime": "<int>",
+    "riskLevel": "High"
+   },
+   "status": 200
+  },
+  "POST /api/analyze (uploadId)": {
+   "body": {
+    "completedAt": "<str>",
+    "confidence": 98,
+    "device": "CPU",
+    "disputed": false,
+    "ensemble": [
+     {
+      "model": "MobileNetV3 (ours)",
+      "pFake": 0.9757,
+      "weight": 1.0
+     }
+    ],
+    "explain": {
+     "focusRegion": "the mouth area",
+     "heatmapDataUrl": "<str>",
+     "method": "occlusion sensitivity",
+     "note": "Model attention concentrated around the mouth area."
+    },
+    "framesAnalyzed": 1,
+    "model": "MobileNetV3-Large",
+    "ok": true,
+    "prediction": "deepfake",
+    "processingTime": "<int>",
+    "riskLevel": "High"
+   },
+   "status": 200
+  },
+  "POST /api/feedback": {
+   "body": {
+    "ok": true
+   },
+   "status": 200
+  },
+  "POST /api/feedback (bad)": {
+   "body": {
+    "error": "agree must be true or false",
+    "error_code": "BAD_FIELD",
+    "ok": false
+   },
+   "status": 400
+  },
+  "POST /api/upload": {
+   "body": {
+    "ok": true,
+    "uploadId": "<str>"
+   },
+   "status": 200
+  },
+  "POST /api/upload (bad type)": {
+   "body": {
+    "error": "Unsupported file type",
+    "error_code": "BAD_TYPE",
+    "ok": false
+   },
+   "status": 400
+  },
+  "POST /api/upload (no file)": {
+   "body": {
+    "error": "No file received",
+    "error_code": "NO_FILE",
+    "ok": false
+   },
+   "status": 400
+  }
+ },
+ "engine": {
+  "engine_available": true,
+  "img:random-person (1).jpeg": {
+   "confidence": 98,
+   "disputed": false,
+   "focusRegion": "the mouth area",
+   "framesAnalyzed": 1,
+   "method": "occlusion sensitivity",
+   "pFake": 0.9757,
+   "prediction": "deepfake",
+   "voters": [
+    "MobileNetV3 (ours)"
+   ]
+  },
+  "img:random-person (2).jpeg": {
+   "confidence": 97,
+   "disputed": false,
+   "focusRegion": "the mouth area",
+   "framesAnalyzed": 1,
+   "method": "occlusion sensitivity",
+   "pFake": 0.9725,
+   "prediction": "deepfake",
+   "voters": [
+    "MobileNetV3 (ours)"
+   ]
+  },
+  "img:random-person (3).jpeg": {
+   "confidence": 98,
+   "disputed": false,
+   "focusRegion": "the mouth area",
+   "framesAnalyzed": 1,
+   "method": "occlusion sensitivity",
+   "pFake": 0.9766,
+   "prediction": "deepfake",
+   "voters": [
+    "MobileNetV3 (ours)"
+   ]
+  },
+  "img:random-person (4).jpeg": {
+   "confidence": 97,
+   "disputed": false,
+   "focusRegion": "the eye region",
+   "framesAnalyzed": 1,
+   "method": "occlusion sensitivity",
+   "pFake": 0.9724,
+   "prediction": "deepfake",
+   "voters": [
+    "MobileNetV3 (ours)"
+   ]
+  },
+  "img:random-person.jpeg": {
+   "confidence": 97,
+   "disputed": false,
+   "focusRegion": "the mouth area",
+   "framesAnalyzed": 1,
+   "method": "occlusion sensitivity",
+   "pFake": 0.9748,
+   "prediction": "deepfake",
+   "voters": [
+    "MobileNetV3 (ours)"
+   ]
+  },
+  "info": {
+   "arch": "mobilenet_v3_large",
+   "backend": "onnx",
+   "checkpoint": "deepshield.onnx",
+   "dfdc_accuracy": null,
+   "engine": "live",
+   "test_accuracy": null,
+   "tpdn_accuracy": 100.0,
+   "trained_on": "V3-Max multi-generator: SG1 + TPDN/SG2 + diffusion, 10 epochs, large",
+   "val_accuracy": 99.9,
+   "verifiers": false
+  },
+  "vid:authentic_portrait.mp4": {
+   "confidence": 98,
+   "framesAnalyzed": 8,
+   "prediction": "real"
+  },
+  "vid:synthetic_faces.mp4": {
+   "confidence": 98,
+   "framesAnalyzed": 13,
+   "prediction": "deepfake"
+  }
+ }
+}

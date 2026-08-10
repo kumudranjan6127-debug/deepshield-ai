@@ -1,84 +1,119 @@
 """
 ============================================================
-DeepShield AI — Flask backend (Phase 2 skeleton)
+DeepShield AI — Flask backend
 
-Serves the static frontend AND the /api/analyze endpoint.
+    Frontend → API → Validation → Inference → Result
+                 │                    │
+              errors.py          inference.py
+                 └──── config.py ─────┘
 
-Phase 2 (now):  echo engine — implements the exact same response
-                contract (and the same seeded-verdict logic) as the
-                frontend mock in assets/js/api.js, so the full pipe
-                can be tested end-to-end before the model exists.
-Phase 4 (next): replace verdict_for() with real inference —
-                OpenCV preprocessing + MobileNetV3 (PyTorch, CPU).
+This module is routing only: it validates a request, hands it to the
+engine, and shapes the reply. Paths and limits live in config.py, failure
+shapes in errors.py, and every model fact comes from inference.py — there
+are no model constants here.
 
-Run:   venv/Scripts/python backend/app.py   (or: npm run backend)
+Run:   venv/Scripts/python backend/app.py   (or: npm start)
 Open:  http://localhost:5000
 ============================================================
 """
-
 import json
+import logging
 import os
 import time
-import uuid
 import urllib.request
+import uuid
 from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request, send_from_directory
 
-import inference  # real engine (Phase 4) — safe to import before torch/model exist
+import errors
+import inference
+from config import CFG
 
-# Repo layout: backend/app.py → project root is one level up
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+log = logging.getLogger("deepshield")
 
+
+def setup_logging():
+    """One configuration for the whole process; modules just get a logger."""
+    logging.basicConfig(
+        level=getattr(logging, CFG.LOG_LEVEL, logging.INFO),
+        format="%(asctime)s %(levelname)-7s %(name)s  %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)  # per-request noise
+
+
+CFG.ensure_dirs()
 app = Flask(__name__, static_folder=None)
-
-MODEL_INFO = {
-    "name": "MobileNetV3-Small",
-    "version": "1.0.0",
-    "params": "2.5M",
-    "input": "224 × 224",
-    "device": "CPU",
-    "backend": "PyTorch",
-}
+errors.register(app)
 
 
 # ---------------------------------------------------------- frontend
 
 @app.route("/")
 def home():
-    return send_from_directory(FRONTEND_DIR, "landing.html")
+    return send_from_directory(CFG.FRONTEND_DIR, "landing.html")
 
 
 @app.route("/<path:path>")
 def assets(path):
-    """Static catch-all for pages + assets. frontend/ contains only
-    public files, and send_from_directory is path-traversal safe —
-    backend code, models and uploads are outside the static root."""
-    return send_from_directory(FRONTEND_DIR, path)
+    """Static catch-all. frontend/ holds only public files, and
+    send_from_directory is path-traversal safe — backend code, models and
+    uploads all live outside that root."""
+    return send_from_directory(CFG.FRONTEND_DIR, path)
 
 
-# ---------------------------------------------------------- helpers
+# ---------------------------------------------------------- model identity
 
-MAX_URL_BYTES = 100 * 1024 * 1024  # 100 MB cap for URL downloads
+def model_identity() -> dict:
+    """What is actually loaded, asked of the engine rather than hardcoded.
+
+    Falls back to the advertised design when no model is present, so the
+    simulated mode still describes the system truthfully."""
+    info = inference.engine_info()
+    arch = info.get("arch", "")
+    return {
+        "name": inference.ARCH_NAMES.get(arch, "MobileNetV3"),
+        "params": inference.ARCH_PARAMS.get(arch, "—"),
+        "input": f"{info.get('input_size', 224)} × {info.get('input_size', 224)}",
+        "backend": info.get("backend", "none"),
+        "device": "CPU",
+        "version": "1.0.0",
+    }
 
 
-def risk_for(prediction: str, confidence: int) -> str:
-    """Single source of truth for the risk label (echo AND live modes)."""
-    if prediction == "deepfake":
-        return "High" if confidence >= 85 else "Medium"
-    return "Low" if confidence >= 80 else "Medium"
+# ---------------------------------------------------------- validation
+
+def staged_upload_path(upload_id: str) -> str | None:
+    """Resolve an uploadId to a staged file. basename() keeps a crafted id
+    from escaping the upload directory."""
+    if not upload_id:
+        return None
+    path = os.path.join(CFG.UPLOAD_DIR, os.path.basename(str(upload_id)))
+    return path if os.path.exists(path) else None
+
+
+def new_temp_path(suffix: str) -> str:
+    return os.path.join(CFG.UPLOAD_DIR, uuid.uuid4().hex + suffix)
+
+
+def discard(path: str | None):
+    """Uploads are temporary by design — analysis never leaves one behind."""
+    if not path or not os.path.exists(path):
+        return
+    try:
+        os.remove(path)
+    except OSError as e:
+        log.warning("could not remove %s: %s", path, e)
 
 
 def download_video(url: str, dest: str) -> int:
-    """Download a direct MP4 with size/content-type caps. Returns bytes."""
+    """Fetch a direct video with size and content-type caps. Returns bytes."""
     req = urllib.request.Request(url, headers={"User-Agent": "DeepShield/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with urllib.request.urlopen(req, timeout=CFG.URL_TIMEOUT_SECONDS) as r:
         ctype = r.headers.get("Content-Type", "")
         if "video" not in ctype and not url.lower().split("?")[0].endswith(".mp4"):
-            raise ValueError("URL does not point to a video")
+            raise errors.not_a_video()
         size = 0
         with open(dest, "wb") as f:
             while True:
@@ -86,18 +121,18 @@ def download_video(url: str, dest: str) -> int:
                 if not chunk:
                     break
                 size += len(chunk)
-                if size > MAX_URL_BYTES:
-                    raise ValueError("Video larger than the 100 MB limit")
+                if size > CFG.MAX_URL_BYTES:
+                    raise errors.too_large(CFG.MAX_URL_BYTES // (1024 * 1024))
                 f.write(chunk)
     return size
 
 
-# ---------------------------------------------------------- echo engine (pre-model fallback)
+# ---------------------------------------------------------- echo engine
+# Used when no model is present. Deliberately mirrors DS.api._verdictFor in
+# the frontend so a demo gives the same answer in either mode.
 
 def fnv_hash(s: str) -> int:
-    """FNV-1a, bit-identical to DS.util.hash in assets/js/utils.js —
-    the mock (JS) and this server produce the SAME verdict for the
-    same file, so demos stay consistent across modes."""
+    """FNV-1a, bit-identical to DS.util.hash in assets/js/utils.js."""
     h = 2166136261
     for ch in s:
         h ^= ord(ch)
@@ -105,9 +140,7 @@ def fnv_hash(s: str) -> int:
     return h
 
 
-def verdict_for(file_name, file_size, file_type):
-    """Phase 2 placeholder — port of DS.api._verdictFor.
-    Phase 4 replaces this with OpenCV + MobileNetV3 inference."""
+def echo_verdict(file_name, file_size, file_type):
     name = (file_name or "").lower()
     seed = fnv_hash(name + str(file_size or 0))
 
@@ -123,31 +156,30 @@ def verdict_for(file_name, file_size, file_type):
     return prediction, confidence, frames
 
 
+# ---------------------------------------------------------- API
+
 @app.get("/api/health")
 def health():
     live = inference.engine_available()
     return jsonify({
+        "ok": True,
         "status": "ok",
         "engine": "live" if live else "echo",
-        "model": MODEL_INFO,
+        "model": model_identity(),
         **inference.engine_info(),
     })
-
-
-FEEDBACK_PATH = os.path.join(BASE_DIR, "data", "feedback.jsonl")
 
 
 @app.post("/api/feedback")
 def feedback():
     """Record whether the user agreed with a verdict.
 
-    Deliberately stores NO media and no personal data — just the verdict
-    and a thumbs up/down. This is an evaluation signal (how the system
-    performs in the wild), never a training label: nothing here is fed
-    back into the model automatically."""
+    Stores no media and nothing personal — the verdict and a thumbs
+    up/down. This is an evaluation signal, never a training label:
+    nothing here reaches the model automatically."""
     d = request.get_json(silent=True) or {}
     if not isinstance(d.get("agree"), bool):
-        return jsonify({"error": "agree must be true or false"}), 400
+        raise errors.bad_field("agree", "true or false")
 
     entry = {
         "at": datetime.now(timezone.utc).isoformat(),
@@ -157,111 +189,114 @@ def feedback():
         "fileType": str(d.get("fileType", ""))[:10],
         "agree": d["agree"],
     }
-    os.makedirs(os.path.dirname(FEEDBACK_PATH), exist_ok=True)
-    with open(FEEDBACK_PATH, "a", encoding="utf-8") as f:
+    with open(CFG.FEEDBACK_PATH, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
+    log.info("feedback recorded: agree=%s", entry["agree"])
     return jsonify({"ok": True})
-
-
-ALLOWED_UPLOAD_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".webm", ".mov"}
 
 
 @app.post("/api/upload")
 def upload():
-    """Stage a file for analysis. The browser can't carry a File object
-    across page navigation, so the upload page parks it here and passes
-    the returned uploadId to processing.html via the scan object."""
+    """Stage a file for analysis. A File object cannot survive the page
+    navigation to processing.html, so the upload page parks it here and
+    passes the returned uploadId along."""
     if "file" not in request.files:
-        return jsonify({"error": "No file received"}), 400
+        raise errors.no_file()
     f = request.files["file"]
     ext = os.path.splitext(f.filename or "")[1].lower()
-    if ext not in ALLOWED_UPLOAD_EXTS:
-        return jsonify({"error": "Unsupported file type"}), 400
+    if ext not in CFG.ALLOWED_UPLOAD_EXTS:
+        raise errors.bad_type()
+
     upload_id = uuid.uuid4().hex + ext
-    f.save(os.path.join(UPLOAD_DIR, upload_id))
-    return jsonify({"uploadId": upload_id})
+    f.save(os.path.join(CFG.UPLOAD_DIR, upload_id))
+    log.info("staged upload %s (%s)", upload_id, f.filename)
+    return jsonify({"ok": True, "uploadId": upload_id})
+
+
+def _read_request(live: bool):
+    """Pull the analysis request apart, whichever way it arrived.
+
+    Returns (file_name, file_type, file_size, frame_rate, media_path,
+    owned) — `owned` marks a file this request created, which is the only
+    kind it may delete afterwards."""
+    if "file" in request.files:
+        f = request.files["file"]
+        file_name = f.filename or "upload"
+        file_type = request.form.get("fileType", "image")
+        frame_rate = float(request.form.get("frameRate", CFG.DEFAULT_FRAME_RATE))
+        if live:
+            ext = os.path.splitext(file_name)[1] or (
+                ".mp4" if file_type == "video" else ".jpg")
+            path = new_temp_path(ext)
+            f.save(path)
+            return file_name, file_type, os.path.getsize(path), frame_rate, path, True
+        return file_name, file_type, len(f.read()), frame_rate, None, False
+
+    d = request.get_json(silent=True) or {}
+    url = d.get("url") or ""
+    file_name = d.get("fileName") or (
+        url.rstrip("/").rsplit("/", 1)[-1] if url else "video.mp4")
+    file_type = d.get("fileType", "video")
+    file_size = d.get("fileSize")
+    frame_rate = float(d.get("frameRate", CFG.DEFAULT_FRAME_RATE))
+
+    if live:
+        staged = staged_upload_path(d.get("uploadId"))
+        if staged:
+            return (file_name, file_type, file_size or os.path.getsize(staged),
+                    frame_rate, staged, True)
+        if url:
+            path = new_temp_path(".mp4")
+            return file_name, file_type, download_video(url, path), frame_rate, path, True
+
+    return file_name, file_type, file_size, frame_rate, None, False
 
 
 @app.post("/api/analyze")
 def analyze():
     started = time.perf_counter()
     live = inference.engine_available()
-    tmp_path = None
+    media_path = owned = None
 
     try:
-        if "file" in request.files:
-            # ---- Multipart path: direct uploads
-            f = request.files["file"]
-            file_name = f.filename or "upload"
-            file_type = request.form.get("fileType", "image")
-            frame_rate = float(request.form.get("frameRate", 1))
-            if live:
-                ext = os.path.splitext(file_name)[1] or (".mp4" if file_type == "video" else ".jpg")
-                tmp_path = os.path.join(UPLOAD_DIR, uuid.uuid4().hex + ext)
-                f.save(tmp_path)
-                file_size = os.path.getsize(tmp_path)
-            else:
-                file_size = len(f.read())
-        else:
-            # ---- JSON path: MP4-URL scans (and the pre-Phase-4 live stub)
-            data = request.get_json(silent=True) or {}
-            url = data.get("url", "")
-            file_name = data.get("fileName") or (url.rstrip("/").rsplit("/", 1)[-1] if url else "video.mp4")
-            file_size = data.get("fileSize")
-            file_type = data.get("fileType", "video")
-            frame_rate = float(data.get("frameRate", 1))
-            upload_id = data.get("uploadId")
-            if live and upload_id:
-                # File was staged earlier via /api/upload (basename → no traversal)
-                staged = os.path.join(UPLOAD_DIR, os.path.basename(upload_id))
-                if os.path.exists(staged):
-                    tmp_path = staged
-                    file_size = file_size or os.path.getsize(staged)
-            elif live and url:
-                tmp_path = os.path.join(UPLOAD_DIR, uuid.uuid4().hex + ".mp4")
-                file_size = download_video(url, tmp_path)
+        (file_name, file_type, file_size,
+         frame_rate, media_path, owned) = _read_request(live)
 
         extras = {}
-        if live and tmp_path:
-            # ---- REAL inference: OpenCV sampling + MobileNetV3 on CPU
-            result = inference.analyze_file(tmp_path, file_type, frame_rate)
+        if live and media_path:
+            result = inference.analyze_file(media_path, file_type, frame_rate)
             prediction = result["prediction"]
             confidence = result["confidence"]
             frames = result["framesAnalyzed"]
-            # explainability payload for the result/report pages
             extras = {k: result.get(k) for k in ("ensemble", "disputed", "explain")}
         else:
-            # ---- Echo fallback (no model yet, or metadata-only request)
-            prediction, confidence, frames = verdict_for(file_name, file_size, file_type)
+            # No model, or a metadata-only request: the labelled demo engine
+            prediction, confidence, frames = echo_verdict(file_name, file_size, file_type)
+
+        identity = model_identity()
+        log.info("analyzed %s (%s) -> %s %d%% in %d ms", file_name, file_type,
+                 prediction, confidence, int((time.perf_counter() - started) * 1000))
 
         return jsonify({
+            "ok": True,
             "prediction": prediction,
             "confidence": confidence,
-            "riskLevel": risk_for(prediction, confidence),
+            "riskLevel": inference.risk_for(prediction, confidence),
             "framesAnalyzed": frames,
             "processingTime": int((time.perf_counter() - started) * 1000),
-            "model": MODEL_INFO["name"],
-            "device": MODEL_INFO["device"],
+            "model": identity["name"],
+            "device": identity["device"],
             "completedAt": datetime.now(timezone.utc).isoformat(),
             **extras,
         })
-
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
     finally:
-        # Uploads are temporary by design — always clean up
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
+        if owned:
+            discard(media_path)
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    # Debug off by default: its reloader runs a second process that
-    # respawns the first, which is how a dozen instances once piled up.
-    # Set DS_DEBUG=1 while editing backend code.
-    debug = os.environ.get("DS_DEBUG") == "1"
-    print(f"DeepShield AI backend running at http://localhost:{port}")
-    app.run(host="127.0.0.1", port=port, debug=debug)
+    setup_logging()
+    log.info("DeepShield AI backend running at http://localhost:%d", CFG.PORT)
+    log.info("config: %s", CFG.summary())
+    print(f"DeepShield AI backend running at http://localhost:{CFG.PORT}")
+    app.run(host=CFG.HOST, port=CFG.PORT, debug=CFG.DEBUG)

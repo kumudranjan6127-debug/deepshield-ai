@@ -23,13 +23,16 @@ DS.api = {
     return health && health.engine === 'live' ? 'live' : 'simulated';
   },
 
+  /* Placeholders only. The running model reports itself through
+     /api/health and DS.server.hydrate() overwrites these — nothing here
+     names a specific variant, so a stale value can never be displayed. */
   MODEL: {
-    name: 'MobileNetV3-Small',
+    name: 'MobileNetV3',
     version: '1.0.0',
-    params: '2.5M',
+    params: '—',
     input: '224 × 224',
     device: 'CPU',
-    backend: 'PyTorch',
+    backend: '—',
   },
 
   /**

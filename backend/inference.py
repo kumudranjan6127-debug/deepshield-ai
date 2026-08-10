@@ -14,14 +14,37 @@ Design:
 ============================================================
 """
 
+import logging
 import os
 
-# Repo layout: backend/inference.py → models/ lives at the project root
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CKPT_PATH = os.path.join(BASE_DIR, "models", "deepshield_mobilenetv3.pth")
-ONNX_PATH = os.path.join(BASE_DIR, "models", "deepshield.onnx")
-ONNX_META_PATH = ONNX_PATH + ".json"
-YUNET_PATH = os.path.join(BASE_DIR, "models", "face_detection_yunet.onnx")
+from config import CFG
+
+log = logging.getLogger("deepshield")
+
+# Paths come from config; these aliases keep the code below readable.
+BASE_DIR = CFG.BASE_DIR
+CKPT_PATH = CFG.CKPT_PATH
+ONNX_PATH = CFG.ONNX_PATH
+ONNX_META_PATH = CFG.ONNX_META_PATH
+YUNET_PATH = CFG.YUNET_PATH
+
+# The only place an architecture is turned into human-facing text. app.py
+# reads these so no model name is ever written twice.
+ARCH_NAMES = {
+    "mobilenet_v3_small": "MobileNetV3-Small",
+    "mobilenet_v3_large": "MobileNetV3-Large",
+}
+ARCH_PARAMS = {
+    "mobilenet_v3_small": "2.5M",
+    "mobilenet_v3_large": "5.4M",
+}
+
+
+def risk_for(prediction: str, confidence: int) -> str:
+    """Risk label for a verdict — one definition, used by every caller."""
+    if prediction == "deepfake":
+        return "High" if confidence >= 85 else "Medium"
+    return "Low" if confidence >= 80 else "Medium"
 
 # ---- Ensemble: pretrained HuggingFace verifiers (images only) ----
 # OPT-IN (DS_VERIFIERS=1). They mattered when our model was blind to
@@ -36,7 +59,7 @@ HF_MODELS = [
 
 
 def verifiers_enabled() -> bool:
-    return os.environ.get("DS_VERIFIERS", "").lower() in ("1", "true", "on", "yes")
+    return CFG.VERIFIERS
 import re as _re
 _FAKE_LABEL = _re.compile(r"fake|deep|ai|artificial|synthetic|generat", _re.I)
 
@@ -64,7 +87,7 @@ def engine_available() -> bool:
     """True when a runnable model exists — ONNX (preferred) or a PyTorch
     checkpoint. DS_ENGINE=echo forces the openly-labeled simulated mode
     (the UI then shows the yellow 'Simulated (demo)' badge)."""
-    if os.environ.get("DS_ENGINE", "").lower() == "echo":
+    if CFG.FORCE_ECHO:
         return False
     if onnx_available():
         return True
@@ -178,7 +201,7 @@ class _Engine:
     # ---- shared forward: (N,3,H,W) float32 → (N,classes) probabilities ----
     # OpenCV's DNN engine dies on large batches (36 crashed the process,
     # 16 is fine), so requests are chunked rather than trusted whole.
-    MAX_BATCH = 8
+    MAX_BATCH = CFG.MAX_FORWARD_BATCH
 
     def _forward(self, batch):
         np = self.np
@@ -223,7 +246,7 @@ class _Engine:
         # (dataset faces are ~256px): a 2687px press portrait scored 0.94
         # fake, the same photo at 1024px scored 0.02. Normalising the scale
         # first removes that artefact.
-        MAX_SIDE = 1024
+        MAX_SIDE = CFG.MAX_IMAGE_SIDE
         if max(rgb.shape[:2]) > MAX_SIDE:
             s = MAX_SIDE / max(rgb.shape[:2])
             rgb = cv2.resize(rgb, (int(rgb.shape[1] * s), int(rgb.shape[0] * s)),
@@ -273,7 +296,7 @@ class _Engine:
         return self._forward(batch).mean(axis=0)
 
     @staticmethod
-    def _normalize_compression(img, quality=88):
+    def _normalize_compression(img, quality=CFG.JPEG_NORMALISE_QUALITY):
         """Put every input in the same compression domain the model trained
         on. Training saw JPEG-recompressed faces (q30-95); a pristine
         camera original carries high-frequency detail it never learned as
@@ -304,7 +327,7 @@ class _Engine:
             probs = self._probs(im)
         return self._verdict(probs), 1
 
-    def predict_video(self, video_path, frame_rate=1.0, max_frames=60):
+    def predict_video(self, video_path, frame_rate=CFG.DEFAULT_FRAME_RATE, max_frames=CFG.MAX_VIDEO_FRAMES):
         """Sample ~frame_rate frames/sec (CPU-friendly), average the
         probabilities, return the aggregate verdict."""
         import cv2
@@ -342,7 +365,7 @@ class _Engine:
     # on both backends (Grad-CAM would need gradients, which the ONNX
     # runtime cannot provide) — and it is easier to justify: we measure
     # the model's dependence rather than interpret its internals.
-    def explain(self, face_img, landmarks, grid=6):
+    def explain(self, face_img, landmarks, grid=CFG.OCCLUSION_GRID):
         import cv2
         import base64
         np = self.np
@@ -489,7 +512,7 @@ def _get_hf_engines():
 
 # ---------------------------------------------------------- public API
 
-def analyze_file(path, file_type, frame_rate=1.0):
+def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
     """Main entry for app.py.
     → dict {prediction, confidence, framesAnalyzed, ensemble?}"""
     eng = _get_engine()
@@ -533,7 +556,7 @@ def analyze_file(path, file_type, frame_rate=1.0):
     # authentic photo at 1.00 — it recognises processing, not manipulation.
     # A false "fake" on someone's real photo is the worst outcome we can
     # produce, so verifiers now advise rather than decide.
-    OWN_WEIGHT = 0.75
+    OWN_WEIGHT = CFG.OWN_WEIGHT
     if len(votes) > 1:
         w_hf = (1.0 - OWN_WEIGHT) / (len(votes) - 1)
         weights = [OWN_WEIGHT] + [w_hf] * (len(votes) - 1)
@@ -547,7 +570,7 @@ def analyze_file(path, file_type, frame_rate=1.0):
     # Verifiers can still overrule, but only together and only when both
     # are near-certain — one biased verifier is never enough.
     verifiers = [v["pFake"] for v in votes[1:]]
-    if verifiers and all(x >= 0.85 for x in verifiers):
+    if verifiers and all(x >= CFG.VERIFIER_OVERRULE_AT for x in verifiers):
         p = max(p, sum(verifiers) / len(verifiers))
 
     prediction = "deepfake" if p >= 0.5 else "real"

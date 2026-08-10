@@ -1,8 +1,0 @@
-{"at": "2026-08-08T06:51:47.926905+00:00", "scanId": "SCAN-792EB9", "prediction": "deepfake", "confidence": 63, "fileType": "image", "agree": true}
-{"at": "2026-08-08T06:58:07.053906+00:00", "scanId": "SCAN-A9DA1E", "prediction": "deepfake", "confidence": 96, "fileType": "image", "agree": true}
-{"at": "2026-08-08T08:44:56.414020+00:00", "scanId": "SCAN-BF800D", "prediction": "deepfake", "confidence": 95, "fileType": "image", "agree": true}
-{"at": "2026-08-08T08:48:23.194453+00:00", "scanId": "SCAN-EC5EE9", "prediction": "real", "confidence": 82, "fileType": "image", "agree": true}
-{"at": "2026-08-08T10:10:59.846759+00:00", "scanId": "SCAN-8667C7", "prediction": "real", "confidence": 97, "fileType": "video", "agree": false}
-{"at": "2026-08-08T17:31:44.949481+00:00", "scanId": "SCAN-12B99A", "prediction": "deepfake", "confidence": 88, "fileType": "image", "agree": true}
-{"at": "2026-08-08T17:33:00.687047+00:00", "scanId": "SCAN-D7CF97", "prediction": "real", "confidence": 88, "fileType": "image", "agree": true}
-{"at": "2026-08-08T17:33:35.245496+00:00", "scanId": "SCAN-691FAC", "prediction": "real", "confidence": 77, "fileType": "image", "agree": true}
