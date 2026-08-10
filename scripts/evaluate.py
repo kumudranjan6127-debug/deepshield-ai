@@ -355,6 +355,88 @@ def make_conditions(src_dir, out_dir):
     print("  Variants of one photo share a group, so they count as one sample.")
 
 
+# ------------------------------------------------------------ markdown report
+
+def markdown_report(rows, threshold, seen=None, latency=None):
+    """The benchmark table, generated rather than typed.
+
+    A field with no data behind it says so and names what would produce it.
+    Every headline number in this project is meant to be reproducible from
+    the CSV that generated it, and a hand-written table breaks that the
+    first time someone forgets to update it.
+    """
+    y, s = split(rows)
+    m = M.evaluate(y, s, threshold)
+    groups = {r.get("group") for r in rows if r.get("group")}
+    n_groups = len(groups) if groups else len(rows)
+
+    def pct(v):
+        return "*not measurable*" if v is None else f"**{v * 100:.2f}%**"
+
+    def num(v, places=4):
+        return "*not measurable*" if v is None else f"**{v:.{places}f}**"
+
+    lines = [
+        "| Metric | Value | Basis |",
+        "|---|---|---|",
+        f"| Images scored | **{m['n']:,}** | {m['n_real']} real, {m['n_fake']} fake |",
+        f"| Independent groups | **{n_groups}** | the honest sample size — "
+        "images inside a group are correlated |",
+        f"| Accuracy | {pct(m['accuracy'])} | at threshold {threshold:.2f} |",
+        f"| Precision | {pct(m['precision'])} | of everything called fake |",
+        f"| Recall | {pct(m['recall'])} | of the fakes present |",
+        f"| F1 | {pct(m['f1'])} | |",
+        f"| Specificity | {pct(m['specificity'])} | of the real images |",
+        f"| ROC-AUC | {num(m['roc_auc'])} | ranking quality |",
+        f"| PR-AUC | {num(m['pr_auc'])} | |",
+        f"| **False-positive rate** | {pct(m['fpr'])} | **a real photograph called fake** |",
+        f"| False-negative rate | {pct(m['fnr'])} | a deepfake called real |",
+        f"| Brier score | {num(M.brier(y, s))} | calibration, 0 is perfect |",
+        f"| ECE | {num(M.ece(y, s))} | calibration error |",
+    ]
+
+    if seen:
+        seen_set = {x.strip().lower() for x in seen if x.strip()}
+        in_domain = [r for r in rows if r["source"].lower() in seen_set]
+        unseen = [r for r in rows if r["source"].lower() not in seen_set]
+        if in_domain and unseen:
+            a = M.evaluate(*split(in_domain), threshold)
+            b = M.evaluate(*split(unseen), threshold)
+            lines.append(f"| In-domain accuracy | {pct(a['accuracy'])} | "
+                         f"{', '.join(sorted(seen_set))} |")
+            lines.append(f"| **Cross-dataset accuracy** | {pct(b['accuracy'])} | "
+                         f"generators never trained on |")
+            gap = (a["accuracy"] - b["accuracy"]) * 100
+            lines.append(f"| Generalisation gap | **{gap:+.2f} points** | "
+                         "the number that matters most |")
+        else:
+            lines.append("| Cross-dataset accuracy | *no unseen source present* | "
+                         "add a generator the model never trained on |")
+    else:
+        lines.append("| Cross-dataset accuracy | *not measured* | "
+                     "needs `--seen` and a generator outside it |")
+
+    if latency:
+        for label, value in latency.items():
+            lines.append(f"| {label} | **{value}** | `scripts/benchmark.py` |")
+
+    lines += ["", "Per source:", "", "| Class | Source | n | Mean P(fake) | Outcome |",
+              "|---|---|---|---|---|"]
+    sources = {}
+    for r in rows:
+        sources.setdefault((r["label"], r["source"]), []).append(r)
+    for (label, source), group in sorted(sources.items()):
+        ys, ss = split(group)
+        gm = M.evaluate(ys, ss, threshold)
+        rate = gm["fpr"] if label == "real" else gm["recall"]
+        outcome = (f"{rate * 100:.2f}% called fake" if label == "real"
+                   else f"{rate * 100:.2f}% detected") if rate is not None else "—"
+        lines.append(f"| {label} | `{source}` | {len(group)} | "
+                     f"{sum(ss) / len(ss):.3f} | {outcome} |")
+
+    return "\n".join(lines)
+
+
 # -------------------------------------------------------------------- entry
 
 def main():
@@ -368,6 +450,8 @@ def main():
     ap.add_argument("--target-fpr", type=float, default=0.01)
     ap.add_argument("--seen", help="comma-separated sources the model trained on")
     ap.add_argument("--limit", type=int, help="score only the first N images")
+    ap.add_argument("--report", metavar="FILE",
+                    help="write the benchmark table as markdown")
     ap.add_argument("--conditions", metavar="SRC_DIR",
                     help="generate processed variants instead of evaluating")
     args = ap.parse_args()
@@ -397,9 +481,14 @@ def main():
         print(f"  found  {len(items)} images")
         rows = score_all(items, load_group_overrides(args.data), args.out, args.limit)
 
-    report(rows, args.threshold,
-           seen=args.seen.split(",") if args.seen else None,
-           target_fpr=args.target_fpr)
+    seen = args.seen.split(",") if args.seen else None
+    report(rows, args.threshold, seen=seen, target_fpr=args.target_fpr)
+
+    if args.report:
+        table = markdown_report(rows, args.threshold, seen=seen)
+        with open(args.report, "w", encoding="utf-8", newline="\n") as f:
+            f.write(table + "\n")
+        print(f"\n  markdown table -> {args.report}")
     return 0
 
 

@@ -12,7 +12,8 @@
 | **Device** | CPU only |
 | **Trained** | 2026-08-08, Kaggle, single T4 GPU, 10 epochs |
 | **Source checkpoint** | `models/deepshield_mobilenetv3.pth` (archived as `v3_max.pth`) |
-| **Card updated** | 2026-08-10, commit `ab0103d` |
+| **Card updated** | 2026-08-11 |
+| **See also** | [BENCHMARK.md](BENCHMARK.md) · [LIMITATIONS.md](LIMITATIONS.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [SECURITY.md](SECURITY.md) |
 
 ---
 

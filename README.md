@@ -113,6 +113,22 @@ process that respawns the first.
 
 ---
 
+## Documentation
+
+| Document | Answers |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How it is built, and what was left out on purpose |
+| [docs/MODEL_CARD.md](docs/MODEL_CARD.md) | The model, its training data, and what it claims |
+| [docs/BENCHMARK.md](docs/BENCHMARK.md) | Accuracy and latency — and what has never been measured |
+| [docs/LIMITATIONS.md](docs/LIMITATIONS.md) | **Read §1 before using this for anything** |
+| [docs/SECURITY.md](docs/SECURITY.md) | What it refuses, and what it does not defend against |
+| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | The ledger: every open issue, and every fixed one |
+
+No number in that documentation was estimated. Where a figure does not exist,
+the document says so and names what would produce it.
+
+---
+
 ## Running the tests
 
 ```

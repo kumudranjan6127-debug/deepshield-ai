@@ -6,7 +6,7 @@ recorded in this document.
 
 | | |
 |---|---|
-| Snapshot date | 2026-08-10 (updated after Phase 10) |
+| Snapshot date | 2026-08-10 (updated after Phase 11) |
 | Commit | `ab0103d983ed5b272f964ee3cc750a91116b3c8c` (`ab0103d`) |
 | Commit subject | Run the model as ONNX: 1.9 GB backend becomes 197 MB |
 | Branch | `main`, clean working tree, 31 commits |
@@ -496,13 +496,13 @@ failures that looked like bugs.
 | `test_api.py` | 25 | Endpoint contracts: response fields, error shape, `error` stays a plain string, a missing page stays HTML |
 | `test_upload.py` | 21 | An extension is not evidence — size, MIME, magic bytes, decoder, dimensions; renamed executables, HTML, zips and PDFs; decompression bombs; the analysed file is deleted |
 | `test_validation.py` | 22 | Field validation, URL validation, media validation, and the error-code vocabulary pinned against renames |
-| `test_security.py` | 59 | SSRF across IPv4/IPv6/mapped/DNS, **path traversal** through `uploadId` and the static route, rate limiting, the concurrency gate, upload sweeping |
+| `test_security.py` | 76 | SSRF across IPv4/IPv6/mapped/DNS, **path traversal** through `uploadId` and the static route, rate limiting, the concurrency gate, upload sweeping |
 | `test_inference.py` | 29 | Real vs generated, no face, two faces, a tiny face, a 3000px image, heavy compression, reproducibility, the explanation |
 | `test_video.py` | 36 | Aggregation against sequences whose answer is obvious by construction, temporal signals, the 60-frame cap, empty and corrupt clips |
 | `test_model_parity.py` | 25 | Identity agrees across file/engine/API; ONNX vs PyTorch within 1e-4 (measured 3.2e-08); the certainty bands are total |
 | `test_metrics.py` | 19 | Hand-computed answers, ROC-AUC against brute-force pair counting, PR-AUC against a threshold walk, calibration |
 | `test_split.py` | 8 | Lifts the DFDC split out of the V4 notebook and runs it on a synthetic set whose leakage structure is known |
-| **total** | **244** | in ~20 s |
+| **total** | **261** | in ~20 s |
 
 Test media is **generated, never committed**. `tests/conftest.py` builds every
 image and clip from the sample faces and the authentic-portrait clip already
