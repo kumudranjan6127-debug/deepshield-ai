@@ -375,3 +375,72 @@ def start_cleanup_thread():
     t = threading.Thread(target=loop, name="upload-cleanup", daemon=True)
     t.start()
     return t
+
+# =====================================================================
+# 6. Response hardening
+# =====================================================================
+
+def security_headers(is_secure: bool) -> dict:
+    """Headers every response carries.
+
+    The CSP is the important one. This app renders user-supplied file names
+    and server error strings, and its own scripts are all local files — so
+    there is no reason to allow inline script or any remote origin, and
+    saying so turns a future escaping mistake into a blocked request rather
+    than a stolen session.
+
+    `data:` is allowed for images because the occlusion heatmap is delivered
+    as a data URL, and `blob:` because previews are read from the file the
+    user picked. Neither can execute.
+    """
+    headers = {
+        "Content-Security-Policy": "; ".join([
+            "default-src 'self'",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline'",   # inline styles set bar widths
+            "img-src 'self' data: blob:",
+            "media-src 'self' blob:",
+            "font-src 'self'",
+            "connect-src 'self'",
+            "object-src 'none'",
+            "frame-ancestors 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+        ]),
+        # Stop a browser guessing that an upload echoed back is a script
+        "X-Content-Type-Options": "nosniff",
+        # Belt and braces alongside frame-ancestors, for older browsers
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        # Nothing here needs a camera, a microphone or a location
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(), "
+                              "payment=(), usb=()",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Resource-Policy": "same-origin",
+    }
+
+    # Only over TLS. Sending HSTS on a plain-HTTP local run would pin
+    # localhost to https in the developer's browser and be a nuisance to undo.
+    if is_secure and CFG.HSTS_SECONDS > 0:
+        headers["Strict-Transport-Security"] = (
+            f"max-age={CFG.HSTS_SECONDS}; includeSubDomains")
+    return headers
+
+
+def cors_headers(origin: str) -> dict:
+    """Cross-origin headers for an allow-listed caller, or nothing.
+
+    Never `*`. This API accepts uploads and fetches URLs on the caller's
+    behalf; a wildcard would let any page on the internet drive it. An
+    origin that is not on the list gets no CORS headers at all, and the
+    browser refuses the response — which is the correct outcome, not an
+    error to report."""
+    if not origin or origin not in CFG.CORS_ORIGINS:
+        return {}
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Max-Age": "600",
+        "Vary": "Origin",
+    }

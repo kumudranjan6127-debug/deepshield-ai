@@ -307,3 +307,139 @@ def test_stale_uploads_are_swept():
 def test_magic_bytes_decide_the_type(blob, ext, expected):
     import security
     assert security.check_magic(blob, ext) is expected
+
+
+# ------------------------------------------------------- response hardening
+
+@pytest.mark.parametrize("header", [
+    "Content-Security-Policy",
+    "X-Content-Type-Options",
+    "X-Frame-Options",
+    "Referrer-Policy",
+    "Permissions-Policy",
+    "Cross-Origin-Opener-Policy",
+])
+def test_every_response_is_hardened(client, header):
+    """Including static files — a policy that only covers the API leaves
+    the pages that actually run scripts unprotected."""
+    for path in ("/api/health", "/dashboard.html", "/"):
+        assert client.get(path).headers.get(header), f"{path} is missing {header}"
+
+
+def test_the_csp_forbids_inline_script(client):
+    """The app renders user-supplied filenames and server error strings.
+    Blocking inline script turns a future escaping mistake into a blocked
+    request instead of a stolen session."""
+    csp = client.get("/").headers["Content-Security-Policy"]
+    assert "script-src 'self'" in csp
+    assert "unsafe-inline" not in csp.split("script-src")[1].split(";")[0]
+    assert "unsafe-eval" not in csp
+    assert "object-src 'none'" in csp
+    assert "frame-ancestors 'none'" in csp
+
+
+def test_the_frontend_contains_nothing_the_csp_would_block():
+    """A policy the app violates is a policy someone will switch off."""
+    import glob
+    import re
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    offenders = []
+    for path in glob.glob(os.path.join(root, "frontend", "*.html")):
+        source = open(path, encoding="utf-8").read()
+        if re.search(r"<script(?![^>]*\ssrc=)[^>]*>", source):
+            offenders.append(f"{os.path.basename(path)}: inline <script>")
+        if re.search(r"\son(click|load|error|change|submit)\s*=", source):
+            offenders.append(f"{os.path.basename(path)}: inline handler")
+    for path in glob.glob(os.path.join(root, "frontend", "assets", "js", "**", "*.js"),
+                          recursive=True):
+        source = open(path, encoding="utf-8").read()
+        # Comments may legitimately mention the scheme; only real code counts.
+        source = re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+        source = re.sub(r"^\s*//.*$", "", source, flags=re.M)
+        if re.search(r"""["'`]\s*javascript:""", source):
+            offenders.append(f"{os.path.basename(path)}: javascript: URL")
+
+    assert not offenders, "; ".join(offenders)
+
+
+def test_hsts_only_over_tls(client):
+    """Sending HSTS on a plain local run pins localhost to https in the
+    developer's browser, which is a nuisance to undo."""
+    assert "Strict-Transport-Security" not in client.get("/api/health").headers
+
+    import security
+    assert "Strict-Transport-Security" in security.security_headers(is_secure=True)
+
+
+# --------------------------------------------------------------------- CORS
+
+def test_an_unknown_origin_gets_no_cors_headers(client):
+    r = client.get("/api/health", headers={"Origin": "https://evil.example"})
+    assert not any(name.lower().startswith("access-control")
+                   for name in r.headers.keys())
+
+
+def test_cors_is_never_a_wildcard(monkeypatch):
+    """This API accepts uploads and fetches URLs on the caller's behalf; a
+    wildcard would let any page on the internet drive it."""
+    import security
+    from config import CFG
+    monkeypatch.setattr(CFG, "CORS_ORIGINS", ("https://app.example",))
+    assert security.cors_headers("*") == {}
+    allowed = security.cors_headers("https://app.example")
+    assert allowed["Access-Control-Allow-Origin"] == "https://app.example"
+    assert allowed["Vary"] == "Origin"
+
+
+def test_an_allow_listed_origin_is_answered(client, monkeypatch):
+    from config import CFG
+    monkeypatch.setattr(CFG, "CORS_ORIGINS", ("https://app.example",))
+    r = client.get("/api/health", headers={"Origin": "https://app.example"})
+    assert r.headers["Access-Control-Allow-Origin"] == "https://app.example"
+
+
+def test_a_preflight_from_a_stranger_is_refused(client, monkeypatch):
+    from config import CFG
+    monkeypatch.setattr(CFG, "CORS_ORIGINS", ("https://app.example",))
+    assert client.options("/api/analyze",
+                          headers={"Origin": "https://evil.example"}).status_code == 403
+    assert client.options("/api/analyze",
+                          headers={"Origin": "https://app.example"}).status_code == 204
+
+
+# -------------------------------------------------------------------- HTTPS
+
+def test_https_is_not_forced_by_default(client):
+    assert client.get("/api/health").status_code == 200
+
+
+def test_a_plain_write_is_refused_when_tls_is_required(client, monkeypatch):
+    """A redirect would drop the request body, so a POST is refused rather
+    than moved."""
+    from config import CFG
+    monkeypatch.setattr(CFG, "FORCE_HTTPS", True)
+    r = client.post("/api/feedback", json={"agree": True})
+    assert r.status_code == 400
+    assert r.get_json()["error_code"] == "INSECURE_REQUEST"
+
+
+def test_a_plain_read_is_redirected_when_tls_is_required(client, monkeypatch):
+    from config import CFG
+    monkeypatch.setattr(CFG, "FORCE_HTTPS", True)
+    r = client.get("/dashboard.html")
+    assert r.status_code == 308
+    assert r.headers["Location"].startswith("https://")
+
+
+def test_a_forwarded_proto_is_trusted_only_behind_a_proxy(client, monkeypatch):
+    """Otherwise any client can claim TLS by sending a header."""
+    from config import CFG
+    monkeypatch.setattr(CFG, "FORCE_HTTPS", True)
+    monkeypatch.setattr(CFG, "TRUST_PROXY", False)
+    assert client.get("/dashboard.html",
+                      headers={"X-Forwarded-Proto": "https"}).status_code == 308
+
+    monkeypatch.setattr(CFG, "TRUST_PROXY", True)
+    assert client.get("/dashboard.html",
+                      headers={"X-Forwarded-Proto": "https"}).status_code == 200

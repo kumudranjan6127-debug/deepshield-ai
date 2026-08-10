@@ -24,7 +24,7 @@ import urllib.request
 import uuid
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, g, jsonify, redirect, request, send_from_directory
 
 import errors
 import inference
@@ -49,13 +49,49 @@ def client_key() -> str:
     return request.remote_addr or "unknown"
 
 
+class JsonLines(logging.Formatter):
+    """One JSON object per line, for anything that ships logs somewhere.
+
+    Grep works on the plain format; a log collector wants fields. Which one
+    you get is DS_LOG_JSON, and neither changes what is logged."""
+
+    def format(self, record):
+        payload = {
+            "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if getattr(record, "request_id", None):
+            payload["request_id"] = record.request_id
+        if record.exc_info:
+            payload["traceback"] = self.formatException(record.exc_info)
+        return json.dumps(payload)
+
+
 def setup_logging():
     """One configuration for the whole process; modules just get a logger."""
-    logging.basicConfig(
-        level=getattr(logging, CFG.LOG_LEVEL, logging.INFO),
-        format="%(asctime)s %(levelname)-7s %(name)s  %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    level = getattr(logging, CFG.LOG_LEVEL, logging.INFO)
+    formatter = (JsonLines() if CFG.LOG_JSON else logging.Formatter(
+        "%(asctime)s %(levelname)-7s %(name)s  %(message)s", datefmt="%H:%M:%S"))
+
+    handlers = [logging.StreamHandler()]
+    if CFG.LOG_FILE:
+        # Rotating, because an unbounded log on a small host eventually
+        # fills the disk and takes the service with it.
+        from logging.handlers import RotatingFileHandler
+        handlers.append(RotatingFileHandler(
+            CFG.LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3,
+            encoding="utf-8"))
+
+    root = logging.getLogger()
+    root.setLevel(level)
+    for handler in list(root.handlers):
+        root.removeHandler(handler)
+    for handler in handlers:
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
+
     logging.getLogger("werkzeug").setLevel(logging.WARNING)  # per-request noise
 
 
@@ -64,6 +100,73 @@ app = Flask(__name__, static_folder=None)
 # Refused by Werkzeug before the body is read into memory.
 app.config["MAX_CONTENT_LENGTH"] = CFG.MAX_UPLOAD_BYTES
 errors.register(app)
+
+
+def request_is_secure() -> bool:
+    """Did this request arrive over TLS?
+
+    Behind a proxy the connection to Flask is plain HTTP, so the only
+    evidence is the forwarded header — and that header is only trustworthy
+    when we were told there is a proxy in front."""
+    if request.is_secure:
+        return True
+    if CFG.TRUST_PROXY:
+        return request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip() == "https"
+    return False
+
+
+@app.before_request
+def tag_request():
+    """A short id for this request, echoed on failures.
+
+    When someone reports "it said something went wrong", this is what turns
+    that into a line in the log."""
+    g.request_id = uuid.uuid4().hex[:12]
+    g.started = time.perf_counter()
+
+
+@app.after_request
+def log_api_call(response):
+    """One line per API call, with the timing already measured."""
+    if request.path.startswith("/api/") and request.path != "/api/health":
+        log.info("%s %s -> %s in %d ms [%s]", request.method, request.path,
+                 response.status_code,
+                 int((time.perf_counter() - getattr(g, "started", time.perf_counter())) * 1000),
+                 getattr(g, "request_id", "-"))
+    return response
+
+
+@app.before_request
+def enforce_https():
+    """Send plain HTTP to the TLS address. Off unless DS_FORCE_HTTPS is set,
+    because a local run has no certificate and should not redirect."""
+    if not CFG.FORCE_HTTPS or request_is_secure():
+        return None
+    if request.method not in ("GET", "HEAD"):
+        # Redirecting a POST loses the body; refuse plainly instead.
+        raise errors.insecure_request()
+    return redirect(request.url.replace("http://", "https://", 1), code=308)
+
+
+@app.before_request
+def cors_preflight():
+    """Answer OPTIONS before any route or rate limit sees it."""
+    if request.method != "OPTIONS":
+        return None
+    allowed = security.cors_headers(request.headers.get("Origin", ""))
+    response = app.make_response(("", 204 if allowed else 403))
+    response.headers.extend(allowed)
+    return response
+
+
+@app.after_request
+def harden(response):
+    """Every response, including static files and errors."""
+    for name, value in security.security_headers(request_is_secure()).items():
+        response.headers.setdefault(name, value)
+    for name, value in security.cors_headers(request.headers.get("Origin", "")).items():
+        response.headers[name] = value
+    return response
 
 
 # ---------------------------------------------------------- frontend
@@ -195,7 +298,7 @@ def health():
     live = inference.engine_available()
     return jsonify({
         "ok": True,
-        "status": "ok",
+        "status": "healthy",
         "engine": "live" if live else "echo",
         "model": model_identity(),
         # The frontend labels confidence numbers with these, rather than
@@ -203,6 +306,34 @@ def health():
         "certainty_bands": inference.certainty_bands(),
         "calibrated": False,   # no reliability curve has ever been measured
         **inference.engine_info(),
+    })
+
+
+@app.get("/api/version")
+def version():
+    """What is running, in one small object.
+
+    `/api/health` grew to carry everything the frontend needs to render
+    itself. This is the short answer for a monitor, a deploy check or a
+    person asking "which model is live?" — five fields, no arrays, cheap to
+    read and cheap to diff between deployments.
+
+    Every value comes from the model's own metadata; nothing here is
+    written down twice."""
+    identity = model_identity()
+    live = inference.engine_available()
+    name = " ".join(x for x in (identity.get("model_name"), identity.get("version"))
+                    if x and x != "—")
+    return jsonify({
+        "status": "healthy",
+        "engine": "live" if live else "simulated",
+        "model": name or "unknown",
+        "architecture": identity.get("architecture"),
+        "runtime": identity.get("runtime"),
+        "device": identity.get("device"),
+        "input_size": identity.get("input_size"),
+        "classes": inference.engine_info().get("classes"),
+        "calibrated": False,
     })
 
 

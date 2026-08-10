@@ -6,7 +6,7 @@ recorded in this document.
 
 | | |
 |---|---|
-| Snapshot date | 2026-08-10 (updated after Phase 8) |
+| Snapshot date | 2026-08-10 (updated after Phase 10) |
 | Commit | `ab0103d983ed5b272f964ee3cc750a91116b3c8c` (`ab0103d`) |
 | Commit subject | Run the model as ONNX: 1.9 GB backend becomes 197 MB |
 | Branch | `main`, clean working tree, 31 commits |
@@ -131,6 +131,7 @@ final verdict.
 | GET | `/` | Serves `frontend/landing.html` |
 | GET | `/<path>` | Static files from `frontend/` only |
 | GET | `/api/health` | Engine, backend, model identity, metrics |
+| GET | `/api/version` | The short answer: status, engine, model, runtime, device |
 | POST | `/api/upload` | Stages a file, returns `uploadId` |
 | POST | `/api/analyze` | Runs the analysis |
 | POST | `/api/feedback` | Records a thumbs up/down (no media) |
@@ -140,7 +141,7 @@ final verdict.
 ```json
 {
   "ok": true,
-  "status": "ok",
+  "status": "healthy",
   "engine": "live",
   "model_name": "DeepShield",
   "architecture": "MobileNetV3-Large",
@@ -255,6 +256,45 @@ Live response for an image (heatmap abbreviated):
   only `/api/*` returns JSON errors.
 
 ---
+
+## 3c. Production configuration
+
+Everything below is off or empty by default: a local run needs no TLS and a
+same-origin deployment needs no CORS. Putting the app behind a proxy is a
+configuration change, not a code change.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `DS_CORS_ORIGINS` | *(empty)* | Comma-separated allow-list. Never `*` — this API accepts uploads and fetches URLs on the caller's behalf |
+| `DS_FORCE_HTTPS` | off | Redirect `GET`/`HEAD` to https (308); refuse writes with `INSECURE_REQUEST` rather than dropping the body |
+| `DS_TRUST_PROXY` | off | Whether `X-Forwarded-Proto` / `-For` may be believed |
+| `DS_HSTS_SECONDS` | 180 days | HSTS lifetime, sent **only** over TLS |
+| `DS_LOG_FILE` | *(empty)* | Rotating file handler, 5 MB × 3 |
+| `DS_LOG_JSON` | off | One JSON object per line for a log collector |
+| `DS_RATE_LIMIT` / `DS_RATE_WINDOW` | 5 / 60 s | Per-client request budget |
+| `DS_WORKERS` / `DS_QUEUE_WAIT` | 2 / 20 s | Concurrent analyses, then 503 |
+| `DS_UPLOAD_TTL` / `DS_CLEANUP_INTERVAL` | 30 min / 5 min | Staged-upload sweep |
+
+Every response — API, static page and error alike — carries:
+
+```
+Content-Security-Policy   default-src 'self'; script-src 'self'; object-src 'none';
+                          frame-ancestors 'none'; img-src 'self' data: blob'; …
+X-Content-Type-Options    nosniff
+X-Frame-Options           DENY
+Referrer-Policy           strict-origin-when-cross-origin
+Permissions-Policy        camera=(), microphone=(), geolocation=(), payment=(), usb=()
+Cross-Origin-Opener-Policy / -Resource-Policy   same-origin
+Strict-Transport-Security only when the request arrived over TLS
+```
+
+The CSP allows no inline script and no remote origin. `tests/test_security.py`
+asserts the frontend contains nothing the policy would block, because a policy
+the app violates is a policy someone eventually switches off.
+
+Unexpected failures return an `incident` id that matches a logged traceback,
+so a report of "it said something went wrong" can be traced without asking
+the user to reproduce it.
 
 ## 4. Request handling and security
 

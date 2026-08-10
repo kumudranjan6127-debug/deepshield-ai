@@ -60,7 +60,7 @@
     "ok": true,
     "params": "5.4M",
     "runtime": "ONNX",
-    "status": "ok",
+    "status": "healthy",
     "test_accuracy": null,
     "tpdn_accuracy": 100.0,
     "trained_on": "V3-Max multi-generator: SG1 + TPDN/SG2 + diffusion, 10 epochs, large",

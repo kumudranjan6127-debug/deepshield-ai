@@ -93,6 +93,21 @@ class Config:
     OWN_WEIGHT = 0.75                                  # verifiers share the remainder
     VERIFIER_OVERRULE_AT = 0.85                        # and only when they all agree
 
+    # ---- Production hardening ----
+    # All off or empty by default: a local run should not need TLS, and a
+    # same-origin deployment needs no CORS. These exist so that putting the
+    # app behind a proxy is a configuration change rather than a code change.
+    #
+    # CORS is an allow-list, never "*". The API accepts uploads and fetches
+    # URLs on the caller's behalf; a wildcard would let any page on the
+    # internet drive it with the user's cookies.
+    CORS_ORIGINS = tuple(o.strip() for o in _str("DS_CORS_ORIGINS", "").split(",")
+                         if o.strip())
+    FORCE_HTTPS = _bool("DS_FORCE_HTTPS")     # redirect http -> https at the edge
+    HSTS_SECONDS = _int("DS_HSTS_SECONDS", 180 * 24 * 3600)
+    LOG_FILE = _str("DS_LOG_FILE", "")        # empty = stderr only
+    LOG_JSON = _bool("DS_LOG_JSON")           # one JSON object per line
+
     # ---- Video: how per-frame scores become one verdict ----
     # Averaging alone is the wrong shape for this problem. A manipulated
     # clip is often only partly manipulated — the face is turned away, or

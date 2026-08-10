@@ -176,7 +176,7 @@ def test_error_codes_are_stable_strings(client):
         "CORRUPT_MEDIA", "IMAGE_TOO_LARGE", "IMAGE_TOO_SMALL",
         "VIDEO_TOO_LONG", "TOO_LARGE", "BLOCKED_URL", "INSECURE_URL",
         "URL_NOT_VIDEO", "BAD_FIELD", "RATE_LIMITED", "BUSY",
-        "UPLOAD_NOT_FOUND", "INVALID_INPUT", "INTERNAL",
+        "UPLOAD_NOT_FOUND", "INSECURE_REQUEST", "INVALID_INPUT", "INTERNAL",
     }
     import errors
     produced = set()

@@ -256,8 +256,15 @@
 
     const retry = document.getElementById('proc-error-retry');
     if (TRANSIENT.has(code)) {
+      /* A listener, not a `javascript:` href — the Content-Security-Policy
+         blocks those, and a link that silently does nothing is worse than
+         no link at all. */
       retry.innerHTML = '<i data-lucide="rotate-ccw" class="icon-sm"></i> Retry';
-      retry.href = 'javascript:location.reload()';
+      retry.href = '#';
+      retry.addEventListener('click', event => {
+        event.preventDefault();
+        window.location.reload();
+      });
     } else {
       retry.href = scan && scan.fileType === 'video'
         ? 'upload-video.html' : 'upload-image.html';

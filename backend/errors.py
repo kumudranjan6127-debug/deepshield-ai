@@ -102,6 +102,12 @@ def too_long(seconds: float, limit: int):
 
 # ---- URL fetching ----
 
+def insecure_request():
+    """A write arriving over plain HTTP when TLS is required. A redirect
+    would drop the body, so this is refused rather than moved."""
+    return ApiError("INSECURE_REQUEST", "This endpoint requires HTTPS", status=400)
+
+
 def insecure_url():
     return ApiError("INSECURE_URL", "Only https:// URLs are accepted")
 
@@ -168,7 +174,16 @@ def register(app):
             return _http_error(e)
         if not _is_api():
             raise e
-        log.exception("%s %s failed", request.method, request.path)
-        return jsonify(
-            ApiError("INTERNAL", "Something went wrong on the server", 500).payload()
-        ), 500
+
+        # An unexpected failure is the one case where the user cannot be
+        # told what went wrong — the detail may be anything, including a
+        # path or a filename. They get an id instead, and the id is what
+        # ties their report to the traceback in the log.
+        from flask import g
+        incident = getattr(g, "request_id", None) or "unknown"
+        log.exception("%s %s failed [%s]", request.method, request.path, incident,
+                      extra={"request_id": incident})
+        payload = ApiError("INTERNAL",
+                           "Something went wrong on the server", 500).payload()
+        payload["incident"] = incident
+        return jsonify(payload), 500
