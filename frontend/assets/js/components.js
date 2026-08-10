@@ -165,7 +165,30 @@ DS.server = {
     fill('data-model-accuracy',
          health.test_accuracy != null ? `${health.test_accuracy}%` : '—');
 
+    DS.util.qsa('[data-engine-badge]').forEach(el =>
+      DS.server.paintBadge(el, health.engine === 'live' ? 'live' : 'simulated'));
+
     document.dispatchEvent(new CustomEvent('ds:server-ready', { detail: health }));
+  },
+
+  /* One definition of the live/simulated badge, used by every page.
+
+     This matters more than it looks. A simulated verdict is not a weaker
+     verdict — it is not a verdict at all, just a deterministic stand-in so
+     the interface can be demonstrated without a model. Anywhere a result
+     is shown, the user has to be able to tell which of those they are
+     looking at without going and checking a status page. */
+  paintBadge(el, engine) {
+    if (!el) return;
+    const live = engine === 'live';
+    el.className = `badge ${live ? 'badge-success' : 'badge-warning'} engine-badge`;
+    el.title = live
+      ? 'A trained model analysed this media.'
+      : 'No model analysed this media — this is a demonstration verdict.';
+    el.innerHTML = live
+      ? '<span class="badge-dot pulse"></span>Live model'
+      : '<i data-lucide="flask-conical" class="icon-sm"></i>Simulated — demo only';
+    DS.icons();
   },
 };
 

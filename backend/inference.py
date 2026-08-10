@@ -625,16 +625,42 @@ class _Engine:
         hot_y = (iy + 0.5) / cam.shape[0] * fh_
 
         # Focus-region text, grounded in YuNet landmarks (no fabrication)
-        region = "the central face region"
-        if landmarks:
-            def dist(p):
-                return ((p[0] - hot_x) ** 2 + (p[1] - hot_y) ** 2) ** 0.5
-            nearest = min(landmarks.items(), key=lambda kv: dist(kv[1]))[0]
-            region = {
-                "right_eye": "the eye region", "left_eye": "the eye region",
-                "nose": "the nose area",
-                "mouth_right": "the mouth area", "mouth_left": "the mouth area",
-            }[nearest]
+        REGION_OF = {
+            "right_eye": "the eye region", "left_eye": "the eye region",
+            "nose": "the nose area",
+            "mouth_right": "the mouth area", "mouth_left": "the mouth area",
+        }
+
+        def region_at(px, py):
+            """Nearest landmark, named. No landmarks means no claim."""
+            if not landmarks:
+                return None
+            nearest = min(landmarks.items(),
+                          key=lambda kv: (kv[1][0] - px) ** 2 + (kv[1][1] - py) ** 2)[0]
+            return REGION_OF[nearest]
+
+        region = region_at(hot_x, hot_y) or "the central face region"
+
+        # Every region the prediction leaned on, not just the top one. The
+        # grid was already scored, so this costs nothing — and one region is
+        # a poor summary when a face-swap gives itself away at both the eyes
+        # and the mouth. Each weight is the largest normalised drop any cell
+        # in that region produced.
+        regions = {}
+        for (gy, gx), value in zip(cells, cam.reshape(-1)):
+            if value <= 0:
+                continue
+            px = (gx + 0.5) / grid * fw
+            py = (gy + 0.5) / grid * fh_
+            name = region_at(px, py)
+            if name:
+                regions[name] = max(regions.get(name, 0.0), float(value))
+
+        ranked = sorted(regions.items(), key=lambda kv: kv[1], reverse=True)
+        # Drop the also-rans: a region that barely moved the score is noise
+        # dressed up as an explanation.
+        top = [{"name": n, "weight": round(w, 3)} for n, w in ranked
+               if w >= 0.25 * ranked[0][1]][:3] if ranked else []
 
         # Heatmap overlay image (JPEG data URL)
         base = cv2.resize(np.array(face_img.convert("RGB")), (224, 224))
@@ -650,6 +676,7 @@ class _Engine:
         return {
             "heatmapDataUrl": data_url,
             "focusRegion": region,
+            "regions": top,
             "method": "occlusion sensitivity",
             "note": f"Prediction was most sensitive to {region}.",
         }

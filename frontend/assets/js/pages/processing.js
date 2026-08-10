@@ -167,7 +167,14 @@
     const isVideo = scan.fileType === 'video';
 
     ui.title.textContent = `Analyzing ${truncateName(scan.fileName)}`;
-    ui.sub.textContent = `MobileNetV3 inference · CPU · ${isVideo ? 'video' : 'image'}`;
+    /* The model names itself; this line used to hardcode "MobileNetV3". */
+    const describeRun = () => {
+      const name = DS.api.MODEL.name && DS.api.MODEL.name !== '—'
+        ? DS.api.MODEL.name : 'Model';
+      ui.sub.textContent = `${name} inference · CPU · ${isVideo ? 'video' : 'image'}`;
+    };
+    describeRun();
+    document.addEventListener('ds:server-ready', describeRun);
 
     // Stage labels come straight from the engine definition
     const labels = DS.api._stages(isVideo).map(s => s.label);
@@ -194,9 +201,75 @@
       },
     })
       .then(result => { if (!cancelled) finish({ ...scan, ...result }, ui); })
-      .catch(() => {
-        DS.toast('Analysis failed. Please try again.', 'error');
-        setTimeout(() => window.location.replace('dashboard.html'), 1400);
-      });
+      .catch(error => { if (!cancelled) showFailure(error, scan); });
   });
+
+  /* ---- Failure ----
+     Every refusal the backend produces carries a stable `error_code` and a
+     sentence written for a person. Both are shown. The hints below add the
+     one thing the server cannot know: what this user should do next. */
+  const RECOVERY = {
+    UPLOAD_NOT_FOUND: 'Staged uploads are cleared after 30 minutes. Upload the file again.',
+    TOO_LARGE:        'Try a smaller file, or trim the clip before uploading.',
+    IMAGE_TOO_LARGE:  'Resize the image below 40 megapixels and try again.',
+    IMAGE_TOO_SMALL:  'The image is too small to contain a usable face.',
+    VIDEO_TOO_LONG:   'Trim the clip and upload the section you care about.',
+    BAD_TYPE:         'Supported: JPG, PNG, WebP, MP4, MOV and WebM.',
+    BAD_MAGIC:        'The file contents do not match its extension. It may be renamed or damaged.',
+    BAD_MIME:         'The file contents do not match its extension. It may be renamed or damaged.',
+    CORRUPT_MEDIA:    'The file could not be decoded. Try re-exporting it.',
+    EMPTY_FILE:       'The file is empty.',
+    BLOCKED_URL:      'That address points inside a private network, so it is not fetched.',
+    INSECURE_URL:     'Only https:// links to a direct video file are accepted.',
+    URL_NOT_VIDEO:    'That link is a web page, not a video file. Download the video and upload it.',
+    RATE_LIMITED:     'Too many requests in a short time. Wait a minute and try again.',
+    BUSY:             'The server is analysing something else. Try again in a moment.',
+  };
+
+  /* Worth another attempt without changing anything */
+  const TRANSIENT = new Set(['RATE_LIMITED', 'BUSY', 'INTERNAL']);
+
+  function showFailure(error, scan) {
+    const panel = document.getElementById('proc-error');
+    if (!panel) {
+      DS.toast(error.message || 'Analysis failed.', 'error');
+      return;
+    }
+
+    const code = error && error.code;
+    document.getElementById('proc-error-message').textContent =
+      (error && error.message) || 'The analysis could not be completed.';
+
+    const hint = RECOVERY[code];
+    const hintEl = document.getElementById('proc-error-hint');
+    if (hint) {
+      hintEl.textContent = hint;
+      hintEl.hidden = false;
+    }
+
+    /* The code is what someone quotes when asking for help. */
+    const codeEl = document.getElementById('proc-error-code');
+    if (code) {
+      codeEl.textContent = code;
+      codeEl.hidden = false;
+    }
+
+    const retry = document.getElementById('proc-error-retry');
+    if (TRANSIENT.has(code)) {
+      retry.innerHTML = '<i data-lucide="rotate-ccw" class="icon-sm"></i> Retry';
+      retry.href = 'javascript:location.reload()';
+    } else {
+      retry.href = scan && scan.fileType === 'video'
+        ? 'upload-video.html' : 'upload-image.html';
+    }
+
+    /* Hide the machinery that is no longer running */
+    ['stage-list', 'console-body'].forEach(id => {
+      const el = document.getElementById(id);
+      const card = el && el.closest('section');
+      if (card) card.hidden = true;
+    });
+    panel.hidden = false;
+    DS.icons();
+  }
 })();

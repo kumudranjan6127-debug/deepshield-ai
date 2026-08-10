@@ -6,7 +6,7 @@ recorded in this document.
 
 | | |
 |---|---|
-| Snapshot date | 2026-08-10 (updated after Phase 7) |
+| Snapshot date | 2026-08-10 (updated after Phase 8) |
 | Commit | `ab0103d983ed5b272f964ee3cc750a91116b3c8c` (`ab0103d`) |
 | Commit subject | Run the model as ONNX: 1.9 GB backend becomes 197 MB |
 | Branch | `main`, clean working tree, 31 commits |
@@ -193,6 +193,7 @@ Live response for an image (heatmap abbreviated):
   "riskLevel": "Low",
   "risk": "low",
   "certainty": "very_strong",
+  "engine": "live",
   "framesAnalyzed": 1,
   "processingTime": 831,
   "model": "MobileNetV3-Large",
@@ -202,6 +203,10 @@ Live response for an image (heatmap abbreviated):
   "ensemble": [ { "model": "MobileNetV3 (ours)", "pFake": 0.0612, "weight": 1 } ],
   "explain": {
     "focusRegion": "the eye region",
+    "regions": [
+      { "name": "the eye region", "weight": 1.0 },
+      { "name": "the mouth area", "weight": 0.44 }
+    ],
     "method": "occlusion sensitivity",
     "note": "Prediction was most sensitive to the eye region.",
     "heatmapDataUrl": "data:image/jpeg;base64,… (11,291 chars)"
@@ -218,6 +223,14 @@ Live response for an image (heatmap abbreviated):
   the band table is published by `/api/health` so no threshold is written
   down in the browser. The model is uncalibrated, so `confidence` ranks
   evidence and does not estimate a frequency.
+- `engine` is `"live"` when a model analysed the media and `"simulated"`
+  when the demo verdict was used. `/api/health` reports the engine too, but
+  that is a different request at a different moment — a result read back
+  from history carries its own provenance.
+- `explain.regions` ranks every region the prediction leaned on, weighted by
+  how far the score moved when each was hidden and normalised to the
+  strongest. Regions below a quarter of the top are dropped, at most three
+  survive, and `regions[0].name` always equals `focusRegion`.
 - `explain` is absent for video scans and may be `null` if the heatmap fails.
 - A **video** scan carries a `video` block instead: `framesAnalyzed`,
   `suspiciousFrames`, `suspiciousAt`, `peakFakeScore`, `medianFakeScore`,
@@ -425,7 +438,7 @@ failures that looked like bugs.
 
 | File | Tests | What it holds |
 |---|---|---|
-| `test_api.py` | 22 | Endpoint contracts: response fields, error shape, `error` stays a plain string, a missing page stays HTML |
+| `test_api.py` | 25 | Endpoint contracts: response fields, error shape, `error` stays a plain string, a missing page stays HTML |
 | `test_upload.py` | 21 | An extension is not evidence — size, MIME, magic bytes, decoder, dimensions; renamed executables, HTML, zips and PDFs; decompression bombs; the analysed file is deleted |
 | `test_validation.py` | 22 | Field validation, URL validation, media validation, and the error-code vocabulary pinned against renames |
 | `test_security.py` | 59 | SSRF across IPv4/IPv6/mapped/DNS, **path traversal** through `uploadId` and the static route, rate limiting, the concurrency gate, upload sweeping |
@@ -434,7 +447,7 @@ failures that looked like bugs.
 | `test_model_parity.py` | 25 | Identity agrees across file/engine/API; ONNX vs PyTorch within 1e-4 (measured 3.2e-08); the certainty bands are total |
 | `test_metrics.py` | 19 | Hand-computed answers, ROC-AUC against brute-force pair counting, PR-AUC against a threshold walk, calibration |
 | `test_split.py` | 8 | Lifts the DFDC split out of the V4 notebook and runs it on a synthetic set whose leakage structure is known |
-| **total** | **241** | in ~20 s |
+| **total** | **244** | in ~20 s |
 
 Test media is **generated, never committed**. `tests/conftest.py` builds every
 image and clip from the sample faces and the authentic-portrait clip already

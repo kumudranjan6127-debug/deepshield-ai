@@ -91,9 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const badge = document.getElementById('engine-mode');
   if (!badge) return;
   DS.server.health().then(h => {   // shared request, no duplicate fetch
-    if (h && h.engine === 'live') {
-      badge.className = 'badge badge-success';
-      badge.textContent = 'Live — real model';
-    }
+    // One painter for every engine badge in the app; see components.js.
+    if (h) DS.server.paintBadge(badge, h.engine === 'live' ? 'live' : 'simulated');
   });
 });

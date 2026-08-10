@@ -32,12 +32,15 @@ document.addEventListener('DOMContentLoaded', () => {
   renderMetrics(scan);
   renderInsights(scan);
   renderVideo(scan);
+  renderVerdictFacts(scan);
+  renderWhy(scan);
   bindFeedback(scan);
 
   // Model facts arrive from /api/health — repaint the card when they land
   document.addEventListener('ds:server-ready', renderModel);
   /* Bands arrive with health, which may land after the verdict is drawn. */
   document.addEventListener('ds:server-ready', renderCertainty);
+  document.addEventListener('ds:server-ready', () => renderVerdictFacts(scan));
 });
 
 /* ---- Analysis insights: judge votes + sensitivity heatmap ---- */
@@ -238,6 +241,70 @@ function bandFor(scan, confidence) {
   return (scan.certainty && bands.find(b => b.key === scan.certainty))
       || bands.find(b => confidence >= b.from)
       || null;
+}
+
+/* ---- What produced this verdict ----
+   Model, frames and — most importantly — which engine ran. A simulated
+   verdict is not a weaker verdict, it is a placeholder, and a result read
+   back from history has no status page to consult. */
+function renderVerdictFacts(scan) {
+  const facts = document.getElementById('verdict-facts');
+  if (!facts) return;
+
+  /* "DeepShield V3-Max" rather than "MobileNetV3-Large" — the product and
+     its training run are what identifies a verdict; the architecture is in
+     the model card below. Both come from the model's own metadata. */
+  const model = DS.api.MODEL;
+  const name = [model.model_name, model.version]
+    .filter(v => v && v !== '—').join(' ') || model.name || '—';
+  const rows = [
+    ['Model', name || '—'],
+    [scan.fileType === 'video' ? 'Frames analyzed' : 'Regions analyzed',
+     scan.framesAnalyzed != null ? String(scan.framesAnalyzed) : '—'],
+  ];
+
+  facts.innerHTML = rows.map(([label, value]) => `
+    <div class="meta-row">
+      <dt>${DS.util.escapeHtml(label)}</dt>
+      <dd class="mono">${DS.util.escapeHtml(value)}</dd>
+    </div>`).join('') + `
+    <div class="meta-row">
+      <dt>Engine</dt>
+      <dd><span class="badge" id="scan-engine-badge">—</span></dd>
+    </div>`;
+
+  /* `scan.engine` is stamped on the verdict itself. Older scans predate it;
+     rather than guess, fall back to what the server reports now and let the
+     badge say "simulated" only when we actually know it was. */
+  DS.server.paintBadge(document.getElementById('scan-engine-badge'),
+                       scan.engine || (DS.api.MODE === 'simulated' ? 'simulated' : 'live'));
+}
+
+/* ---- Why? ----
+   Regions the prediction actually leaned on, ranked by how far the score
+   moved when each was hidden. Nothing here is generated prose. */
+function renderWhy(scan) {
+  const block = document.getElementById('verdict-why');
+  const list = document.getElementById('why-list');
+  if (!block || !list) return;
+
+  const explain = scan.explain || {};
+  const regions = Array.isArray(explain.regions) ? explain.regions : [];
+
+  /* Older scans carry only the single focus region — still worth showing. */
+  const items = regions.length
+    ? regions
+    : (explain.focusRegion ? [{ name: explain.focusRegion, weight: null }] : []);
+  if (!items.length) return;
+
+  list.innerHTML = items.map(r => {
+    const label = String(r.name || '').replace(/^the\s+/i, '');
+    const share = typeof r.weight === 'number'
+      ? `<span class="why-bar"><span class="why-fill" style="width:${Math.round(r.weight * 100)}%"></span></span>`
+      : '';
+    return `<li><span class="why-name">${DS.util.escapeHtml(label)}</span>${share}</li>`;
+  }).join('');
+  block.hidden = false;
 }
 
 function renderCertainty() {

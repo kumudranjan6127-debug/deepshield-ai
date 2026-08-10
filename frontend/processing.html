@@ -103,7 +103,7 @@
         <div class="navbar-right">
           <span class="badge badge-info">
             <i data-lucide="brain-circuit" class="icon-sm"></i>
-            MobileNetV3 · CPU
+            <span data-model-name>&mdash;</span> · CPU
           </span>
           <button class="btn-icon" data-logout aria-label="Log out" title="Log out">
             <i data-lucide="log-out" class="icon"></i>
@@ -125,7 +125,7 @@
               </span>
             </div>
             <h1 id="proc-title">Analyzing…</h1>
-            <p class="text-sm" id="proc-sub">MobileNetV3 inference · CPU</p>
+            <p class="text-sm" id="proc-sub">Preparing analysis…</p>
           </section>
 
           <!-- Progress -->
@@ -140,6 +140,27 @@
           </section>
 
           <!-- Pipeline stages -->
+          <!-- Failure panel — replaces the stage list when analysis fails.
+               The server explains itself; showing a generic "try again"
+               and bouncing to the dashboard threw that explanation away. -->
+          <section class="card card-pad proc-error" id="proc-error" aria-label="Analysis failed" hidden>
+            <div class="proc-error-head">
+              <i data-lucide="alert-octagon" class="icon"></i>
+              <h2 class="proc-error-title" id="proc-error-title">Analysis failed</h2>
+            </div>
+            <p class="text-2" id="proc-error-message"></p>
+            <p class="text-xs text-3" id="proc-error-hint" hidden></p>
+            <p class="text-xs text-3 mono" id="proc-error-code" hidden></p>
+            <div class="proc-error-actions">
+              <a class="btn btn-primary" id="proc-error-retry" href="upload-image.html">
+                <i data-lucide="rotate-ccw" class="icon-sm"></i> Try again
+              </a>
+              <a class="btn btn-ghost" href="dashboard.html">
+                <i data-lucide="layout-dashboard" class="icon-sm"></i> Back to dashboard
+              </a>
+            </div>
+          </section>
+
           <section class="card card-pad fade-up" data-delay="2" aria-label="Pipeline stages">
             <div class="card-title"><i data-lucide="activity" class="icon"></i> Pipeline</div>
             <ul class="stage-list" id="stage-list" role="list">
@@ -162,8 +183,9 @@
           <section class="proc-foot fade-up" data-delay="4" aria-label="Runtime details">
             <div class="proc-badges">
               <span class="badge"><i data-lucide="cpu" class="icon-sm"></i> CPU inference</span>
-              <span class="badge"><i data-lucide="brain-circuit" class="icon-sm"></i> MobileNetV3-Small</span>
+              <span class="badge"><i data-lucide="brain-circuit" class="icon-sm"></i> <span data-model-name>—</span></span>
               <span class="badge"><i data-lucide="hard-drive" class="icon-sm"></i> Local processing</span>
+              <span class="badge" data-engine-badge>&mdash;</span>
             </div>
             <button class="btn btn-ghost" id="cancel-btn" data-modal-open="cancel-modal">
               <i data-lucide="x" class="icon-sm"></i> Cancel

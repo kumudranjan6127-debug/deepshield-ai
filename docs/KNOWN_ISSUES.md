@@ -1,7 +1,7 @@
 # Known Issues
 
 Every entry below has been **observed**, not suspected. Where a number is
-given, it was measured. Last reviewed after Phase 7, 2026-08-10.
+given, it was measured. Last reviewed after Phase 8, 2026-08-10.
 
 Severity: 🔴 wrong output or wrong information · 🟡 works but flawed ·
 🔵 limitation to document rather than fix
@@ -259,3 +259,7 @@ class is FFHQ-only. Nothing here should be read as a fairness claim.
 | Path traversal was defended but never tested | `os.path.basename` on `uploadId` and `send_from_directory` for static files were both correct and both one edit away from a file-read primitive. 13 traversal cases now cover them (Phase 7) |
 | The test suites needed a running server | Two of six did, plus `DS_RATE_LIMIT=50` in both places; forgetting either produced failures that looked like bugs. The suite runs on Flask's test client — `python -m pytest`, ~20 s, no server and no network (Phase 7) |
 | Test media had to be remembered | Every fixture is now generated from repository material by `tests/conftest.py`, so coverage cannot quietly vanish on a fresh clone (Phase 7) |
+| Every page displayed MobileNetV3-Small / 2.5M / PyTorch as its fallback | Phase 1 deleted the stale constant from the backend but left the same values hardcoded in eight pages, so with no backend answering the UI described a model that has never been in production. All of it now reads from `/api/health` (Phase 8) |
+| The dashboard badge said "Simulated (demo)" while a real model was running | The badge was static HTML that only ever upgraded to live; there was no badge at all on the result page, where the verdict is actually read. One painter now serves every page, and each verdict carries its own `engine` field (Phase 8) |
+| Analysis failures showed "Analysis failed. Please try again." | The backend produces a specific reason and a stable code for every refusal; the UI discarded both, showed a toast that vanished, and redirected to the dashboard. The reason, the code and a recovery hint now stay on screen (Phase 8) |
+| The explanation named one region | The occlusion grid was already scored, so ranking every region it leaned on cost nothing — a face-swap that gives itself away at both the eyes and the mouth now says so (Phase 8) |

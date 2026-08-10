@@ -104,7 +104,14 @@ DS.api = {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Analysis failed (${res.status})`);
+        /* Carry the server's own words and its stable code. The backend
+           works hard to say exactly what went wrong — "that upload has
+           expired", "image too large" — and replacing that with a generic
+           failure leaves the user with no idea what to do next. */
+        const failure = new Error(err.error || `Analysis failed (${res.status})`);
+        failure.code = err.error_code || null;
+        failure.status = res.status;
+        throw failure;
       }
       const result = await res.json();
       onProgress(100);

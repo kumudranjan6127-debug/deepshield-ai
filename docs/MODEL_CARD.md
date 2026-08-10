@@ -296,6 +296,13 @@ can disagree: a region the model never attends to can still swing the score
 because hiding it changes the image statistics. The UI called the heatmap
 "Grad-CAM" as well, which it has never been. Both are corrected.
 
+The response ranks **every** region the prediction leaned on, not only the
+strongest: `[{"name": "the eye region", "weight": 1.0}, {"name": "the mouth
+area", "weight": 0.44}]`. Each weight is the largest normalised score drop
+that region produced, so the bullets a user reads are ranked measurements
+rather than a narrative — and one region is a poor summary when a face gives
+itself away in two places.
+
 So this reports **which regions the prediction depended on**, never **what is
 wrong with the face**. It needs only forward passes, so it behaves identically
 on both backends — Grad-CAM requires gradients the ONNX runtime cannot

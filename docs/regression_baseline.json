@@ -92,6 +92,7 @@
     "completedAt": "<str>",
     "confidence": 72,
     "device": "CPU",
+    "engine": "simulated",
     "framesAnalyzed": 42,
     "model": "MobileNetV3-Large",
     "ok": true,
@@ -109,6 +110,7 @@
     "confidence": 98,
     "device": "CPU",
     "disputed": false,
+    "engine": "live",
     "ensemble": [
      {
       "model": "MobileNetV3 (ours)",
@@ -120,7 +122,17 @@
      "focusRegion": "the mouth area",
      "heatmapDataUrl": "<str>",
      "method": "occlusion sensitivity",
-     "note": "Prediction was most sensitive to the mouth area."
+     "note": "Prediction was most sensitive to the mouth area.",
+     "regions": [
+      {
+       "name": "the mouth area",
+       "weight": 1.0
+      },
+      {
+       "name": "the eye region",
+       "weight": 0.442
+      }
+     ]
     },
     "framesAnalyzed": 1,
     "model": "MobileNetV3-Large",
@@ -139,6 +151,7 @@
     "confidence": 98,
     "device": "CPU",
     "disputed": false,
+    "engine": "live",
     "ensemble": [
      {
       "model": "MobileNetV3 (ours)",
@@ -150,7 +163,17 @@
      "focusRegion": "the mouth area",
      "heatmapDataUrl": "<str>",
      "method": "occlusion sensitivity",
-     "note": "Prediction was most sensitive to the mouth area."
+     "note": "Prediction was most sensitive to the mouth area.",
+     "regions": [
+      {
+       "name": "the mouth area",
+       "weight": 1.0
+      },
+      {
+       "name": "the eye region",
+       "weight": 0.442
+      }
+     ]
     },
     "framesAnalyzed": 1,
     "model": "MobileNetV3-Large",
@@ -168,6 +191,7 @@
     "completedAt": "<str>",
     "confidence": 98,
     "device": "CPU",
+    "engine": "live",
     "ensemble": [
      {
       "model": "MobileNetV3 (ours)",

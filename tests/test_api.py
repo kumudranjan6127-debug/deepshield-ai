@@ -165,3 +165,37 @@ def test_a_missing_page_stays_html(client):
 @pytest.mark.parametrize("path", ["/", "/dashboard.html", "/assets/js/utils.js"])
 def test_static_routes_serve(client, path):
     assert client.get(path).status_code == 200
+
+
+# ------------------------------------------------------- verdict provenance
+
+def test_a_verdict_says_which_engine_produced_it(client, engine_ready, fake_face):
+    """`/api/health` also reports the engine, but that is a different
+    request at a different moment. A result read back from history has no
+    status page to consult, so the verdict carries its own provenance."""
+    body = upload(client, fake_face, fileType="image").get_json()
+    assert body["engine"] == "live"
+
+
+def test_a_demo_verdict_admits_it_is_a_demo(client):
+    body = client.post("/api/analyze", json={
+        "fileName": "holiday.mp4", "fileType": "video", "fileSize": 1234}).get_json()
+    assert body["engine"] == "simulated", \
+        "a stand-in verdict presented itself as a real one"
+
+
+def test_the_explanation_ranks_every_region_it_leaned_on(client, engine_ready,
+                                                         fake_face):
+    """One region is a poor summary when a face gives itself away in two
+    places. Each weight is the largest normalised drop that region caused."""
+    explain = upload(client, fake_face, fileType="image").get_json()["explain"]
+    regions = explain["regions"]
+
+    assert regions, "no regions were reported"
+    assert len(regions) <= 3, "the also-rans should be dropped"
+    weights = [r["weight"] for r in regions]
+    assert weights == sorted(weights, reverse=True), "regions are not ranked"
+    assert weights[0] == 1.0, "the top region should be the normalisation point"
+    assert all(w >= 0.25 for w in weights), "a negligible region survived"
+    assert regions[0]["name"] == explain["focusRegion"], \
+        "the ranked list disagrees with focusRegion"

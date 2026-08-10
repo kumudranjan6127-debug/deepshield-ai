@@ -103,7 +103,7 @@
         <div class="navbar-right">
           <span class="badge badge-info">
             <i data-lucide="brain-circuit" class="icon-sm"></i>
-            MobileNetV3 · CPU
+            <span data-model-name>&mdash;</span> · CPU
           </span>
           <button class="btn-icon" data-logout aria-label="Log out" title="Log out">
             <i data-lucide="log-out" class="icon"></i>
@@ -178,6 +178,23 @@
               <span class="badge" id="certainty-chip" hidden><!-- filled by result.js --></span>
               <p class="text-2 text-sm verdict-note" id="verdict-note"></p>
               <p class="text-xs text-3" id="verdict-caveat">A detection confidence score, not a probability that the media is fake &mdash; this model has not been calibrated.</p>
+
+              <!-- What produced this verdict. The engine badge is per-scan,
+                   not per-page: a result read from history has to say
+                   whether a model ever looked at the media. -->
+              <dl class="verdict-facts" id="verdict-facts"><!-- filled by result.js --></dl>
+
+              <!-- Why? — grounded in the occlusion grid, so the bullets are
+                   ranked measurements rather than a story. -->
+              <div class="verdict-why" id="verdict-why" hidden>
+                <span class="verdict-why-title">Why?</span>
+                <p class="text-xs text-3">The prediction was most sensitive to:</p>
+                <ul class="why-list" id="why-list"><!-- filled by result.js --></ul>
+              </div>
+
+              <a class="btn btn-primary verdict-cta" id="view-analysis" href="#insights-card">
+                <i data-lucide="microscope" class="icon-sm"></i> View analysis
+              </a>
             </section>
 
             <!-- Analysis insights (explainability) — filled by result.js,
@@ -197,9 +214,15 @@
 
                   <div class="votes" id="votes-list"><!-- vote bars injected --></div>
 
-                  <div class="badge badge-warning" id="disputed-chip" hidden>
-                    <i data-lucide="alert-triangle" class="icon-sm"></i>
-                    Models disagreed on this image
+                  <div class="disputed-note" id="disputed-chip" hidden>
+                    <span class="badge badge-warning">
+                      <i data-lucide="alert-triangle" class="icon-sm"></i> Models disagreed
+                    </span>
+                    <p class="text-xs text-3">
+                      At least one model reached the opposite verdict. The score above is
+                      the combined result &mdash; treat it as weaker evidence than the
+                      number alone suggests, and look at the individual votes.
+                    </p>
                   </div>
                 </div>
               </div>

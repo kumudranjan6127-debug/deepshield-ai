@@ -216,3 +216,41 @@
   .proc-foot { justify-content: center; }
   .console-body { height: 170px; }
 }
+
+/* ---- Failure panel (Phase 8) ---- */
+.proc-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(239, 68, 68, 0.05);
+}
+.proc-error-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--danger);
+}
+.proc-error-title {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text);
+}
+.proc-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+}
+#proc-error-code {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+@media (max-width: 640px) {
+  .proc-error-actions .btn { flex: 1 1 auto; justify-content: center; }
+}

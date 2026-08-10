@@ -356,6 +356,11 @@ def analyze():
             "ok": True,
             "prediction": prediction,
             "confidence": confidence,
+            # Which engine produced THIS verdict. /api/health also reports
+            # the engine, but that is a different request at a different
+            # moment — a result read hours later from history must be able
+            # to say whether a real model looked at the media or not.
+            "engine": "live" if (live and media_path) else "simulated",
             # `riskLevel` is what every page already reads; `risk` and
             # `certainty` are additive. `certainty` is the honest reading of
             # the number — evidence strength, not a probability.

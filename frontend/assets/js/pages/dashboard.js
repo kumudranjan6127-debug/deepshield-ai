@@ -102,10 +102,11 @@ async function hydrateEngineStatus() {
   if (!badge) return;
 
   const health = await DS.server.health(); // shared with DS.server.hydrate()
-  if (!health || health.engine !== 'live') return; // keep the honest demo badge
+  if (!health) return;                    // no backend — the demo badge stands
 
-  badge.className = 'badge badge-success';
-  badge.innerHTML = '<span class="badge-dot pulse"></span>Live engine';
+  // One painter for every engine badge in the app; see components.js.
+  DS.server.paintBadge(badge, health.engine === 'live' ? 'live' : 'simulated');
+  if (health.engine !== 'live') return;
 
   if (health.test_accuracy != null) {
     document.getElementById('acc-val').textContent = `${health.test_accuracy}%`;

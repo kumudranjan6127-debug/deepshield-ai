@@ -293,3 +293,77 @@
   color: var(--text);
 }
 .vt-mark .vt-mark-score { color: var(--text-3); font-size: 11px; }
+
+/* ---- Verdict facts + Why (Phase 8) ---- */
+.verdict-facts {
+  width: 100%;
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
+}
+
+.engine-badge { gap: 6px; }
+
+.verdict-why {
+  width: 100%;
+  margin-top: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  text-align: left;
+}
+.verdict-why-title {
+  display: block;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.why-list {
+  list-style: none;
+  margin: var(--s-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.why-list li {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) 1fr;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: 13px;
+  color: var(--text-2);
+}
+.why-list li::before {
+  content: none;
+}
+.why-name { text-transform: capitalize; }
+
+/* The bar is the measurement, not decoration: it is how far the score
+   moved when that region was hidden, relative to the strongest one. */
+.why-bar {
+  height: 6px;
+  border-radius: var(--r-full);
+  background: rgba(148, 163, 184, 0.14);
+  overflow: hidden;
+}
+.why-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-full);
+  background: var(--primary);
+}
+
+.verdict-cta {
+  margin-top: var(--s-3);
+  width: 100%;
+  justify-content: center;
+}
+
+@media (max-width: 640px) {
+  .why-list li { grid-template-columns: 1fr; gap: 2px; }
+  .verdict-why { padding: var(--s-2); }
+}
