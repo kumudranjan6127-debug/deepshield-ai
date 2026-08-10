@@ -44,6 +44,18 @@ def bad_type():
     return ApiError("BAD_TYPE", "Unsupported file type")
 
 
+def upload_not_found():
+    """A named uploadId that resolves to nothing.
+
+    This has to be an error rather than a fallback. Staged uploads are
+    swept after 30 minutes, so an id going stale is ordinary — and the
+    fallback silently produced a demo verdict that was indistinguishable
+    from a real one, model name and all."""
+    return ApiError("UPLOAD_NOT_FOUND",
+                    "That upload has expired or does not exist. Please upload again.",
+                    status=404)
+
+
 def not_a_video():
     return ApiError("URL_NOT_VIDEO", "URL does not point to a video")
 

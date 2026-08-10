@@ -297,10 +297,16 @@ def _read_request(live: bool):
     frame_rate = float(d.get("frameRate", CFG.DEFAULT_FRAME_RATE))
 
     if live:
-        staged = staged_upload_path(d.get("uploadId"))
+        upload_id = d.get("uploadId")
+        staged = staged_upload_path(upload_id)
         if staged:
             return (file_name, file_type, file_size or os.path.getsize(staged),
                     frame_rate, staged, True)
+        if upload_id:
+            # The caller named media. Falling through from here reached the
+            # demo engine, which returned a fabricated verdict carrying the
+            # real model's name — a stale id looked exactly like an answer.
+            raise errors.upload_not_found()
         if url:
             path = new_temp_path(".mp4")
             size = security.safe_download(url, path)   # scheme + DNS + IP + redirects

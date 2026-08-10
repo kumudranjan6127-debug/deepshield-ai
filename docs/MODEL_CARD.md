@@ -208,7 +208,7 @@ still comes out "real", which is why the response reports
 Every component is returned, so the combination can be recomputed — or
 replaced — from the response alone.
 
-`scripts/video_test.py` pins the behaviour against sequences whose answer is
+`tests/test_video.py` pins the behaviour against sequences whose answer is
 obvious by construction, including the one that matters: 59 calm frames and
 one disaster must stay "real".
 
@@ -237,8 +237,8 @@ scripts/evaluate.py       runs the live engine over eval_data/, writes
                           predictions.csv, prints the metric block, the
                           per-source table, a threshold sweep and the
                           in-domain vs unseen comparison
-scripts/metrics_test.py   40 known-answer tests on the arithmetic
-scripts/split_test.py     24 tests that the V4 training split cannot leak
+tests/test_metrics.py   40 known-answer tests on the arithmetic
+tests/test_split.py     24 tests that the V4 training split cannot leak
 ```
 
 The training notebook computes **no** metrics. It writes raw scores to

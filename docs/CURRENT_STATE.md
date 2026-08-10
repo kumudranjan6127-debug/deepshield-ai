@@ -6,7 +6,7 @@ recorded in this document.
 
 | | |
 |---|---|
-| Snapshot date | 2026-08-10 (updated after Phase 5) |
+| Snapshot date | 2026-08-10 (updated after Phase 7) |
 | Commit | `ab0103d983ed5b272f964ee3cc750a91116b3c8c` (`ab0103d`) |
 | Commit subject | Run the model as ONNX: 1.9 GB backend becomes 197 MB |
 | Branch | `main`, clean working tree, 31 commits |
@@ -114,7 +114,7 @@ rather than a second threshold invented here.
 
 The weights are **provisional**: no labelled video set has been scored, so
 they are reasoned rather than fitted, and they lean on the median because a
-false accusation costs more than a missed forgery. `scripts/video_test.py`
+false accusation costs more than a missed forgery. `tests/test_video.py`
 pins the behaviour they produce.
 
 **Combining votes** (`inference.analyze_file`): own model weight **0.75**, the
@@ -175,7 +175,7 @@ final verdict.
 ```
 
 Every field is read from `models/deepshield.onnx.json` at load; no model
-fact is written twice. `scripts/model_test.py` asserts the metadata file,
+fact is written twice. `tests/test_model_parity.py` asserts the metadata file,
 the loaded engine and this response agree.
 
 ### POST /api/analyze
@@ -393,8 +393,11 @@ backend/           app.py (267 lines) · inference.py (565 lines)
 models/            live ONNX + metadata + YuNet + archive/
 training/          Kaggle/Colab notebooks, result graphs, test media
 scripts/           ds.js (server control) · export_onnx.py (.pth → ONNX)
-                   evaluate.py + ds_metrics.py (Phase 4 evaluation)
-                   *_test.py (regression, security, model, metrics, split)
+                   evaluate.py + ds_metrics.py (evaluation)
+                   regression_test.py (baseline record/verify)
+tests/             the test suite — pytest, no server, no network
+  conftest.py      builds every fixture image and clip from repo material
+  fixtures/        generated on each run, gitignored
 eval_data/         labelled images to evaluate on (gitignored)
 docs/              this file, MODEL_CARD.md, KNOWN_ISSUES.md, DOCUMENTATION.md
 uploads/ data/     runtime only, gitignored
@@ -409,28 +412,47 @@ venv/              local environment, gitignored
 ## 10. Tests
 
 ```
-python scripts/regression_test.py record|verify   behaviour has not changed
-python scripts/security_test.py [--unit]          50 attacks, all refused
-python scripts/model_test.py                      identity, reproducibility, parity
-python scripts/metrics_test.py                    the metric arithmetic
-python scripts/video_test.py                      frame aggregation + temporal signals
-python scripts/split_test.py                      the V4 split cannot leak
+python -m pytest                       the whole suite, ~20 s, no server
+python -m pytest -m security           one category
+python -m pytest -m "not slow"         skip anything that loads the model
+python scripts/regression_test.py record|verify    behaviour has not changed
 ```
 
-| Suite | Checks | Asserts | Needs server |
-|---|---|---|---|
-| regression | 24 | Engine outputs and every API response, field by field | yes |
-| security | 50 | SSRF (v4/v6/DNS/redirects), oversized, forged extension, corrupt and empty media, malformed URLs, rate limit, concurrency, cleanup | yes |
-| model | 40 | Identity agrees across file/engine/API; repeated runs identical; ONNX vs PyTorch within 1e-4 (measured 3.2e-08); certainty bands total, unambiguous and published identically | no |
-| video | 49 | Aggregation against sequences whose answer is obvious by construction (one bad frame must not flip a real clip), plus the temporal signals and timestamp formatting | no |
-| metrics | 63 | Hand-computed answers, plus ROC-AUC against brute-force pair counting, PR-AUC against a threshold walk, and calibration (Brier/ECE/MCE) against worked examples | no |
-| split | 24 | Lifts the DFDC split out of the V4 notebook and runs it on a synthetic set whose leakage structure is known | no |
+`tests/` is the suite. It runs against Flask's test client rather than a
+live server, so nothing has to be started first and no rate limit has to be
+raised — an earlier arrangement needed both, and forgetting either produced
+failures that looked like bugs.
 
-The regression baseline lives in `docs/regression_baseline.json`. Live
-suites need the server running; `security_test.py` sends ~25 requests, so
-start both it and the server with `DS_RATE_LIMIT=50` — and pass it to
-`ds.js` itself, since a plain `restart` drops the variable and the suite
-then throttles itself.
+| File | Tests | What it holds |
+|---|---|---|
+| `test_api.py` | 22 | Endpoint contracts: response fields, error shape, `error` stays a plain string, a missing page stays HTML |
+| `test_upload.py` | 21 | An extension is not evidence — size, MIME, magic bytes, decoder, dimensions; renamed executables, HTML, zips and PDFs; decompression bombs; the analysed file is deleted |
+| `test_validation.py` | 22 | Field validation, URL validation, media validation, and the error-code vocabulary pinned against renames |
+| `test_security.py` | 59 | SSRF across IPv4/IPv6/mapped/DNS, **path traversal** through `uploadId` and the static route, rate limiting, the concurrency gate, upload sweeping |
+| `test_inference.py` | 29 | Real vs generated, no face, two faces, a tiny face, a 3000px image, heavy compression, reproducibility, the explanation |
+| `test_video.py` | 36 | Aggregation against sequences whose answer is obvious by construction, temporal signals, the 60-frame cap, empty and corrupt clips |
+| `test_model_parity.py` | 25 | Identity agrees across file/engine/API; ONNX vs PyTorch within 1e-4 (measured 3.2e-08); the certainty bands are total |
+| `test_metrics.py` | 19 | Hand-computed answers, ROC-AUC against brute-force pair counting, PR-AUC against a threshold walk, calibration |
+| `test_split.py` | 8 | Lifts the DFDC split out of the V4 notebook and runs it on a synthetic set whose leakage structure is known |
+| **total** | **241** | in ~20 s |
+
+Test media is **generated, never committed**. `tests/conftest.py` builds every
+image and clip from the sample faces and the authentic-portrait clip already
+in the repository, so the fixtures are deterministic and cost nothing in git.
+The one thing it cannot synthesise is a genuine face, so `real_face` is a
+frame extracted from `training/video_test/authentic_portrait.mp4` — without
+it the suite could only ever check that fakes look fake.
+
+Nothing touches the network. DNS is stubbed where the SSRF logic needs to
+resolve a name, so the suite runs on a plane and cannot be affected by who
+currently owns a convenient wildcard domain.
+
+`scripts/regression_test.py` is kept separately because it is a different
+tool: it records what the system currently does into
+`docs/regression_baseline.json` and diffs against it, which answers "did this
+refactor change anything" rather than "is this correct". It needs the server
+running, and both it and the server want `DS_RATE_LIMIT=50` — pass it to
+`ds.js` itself, since a plain `restart` drops the variable.
 
 ---
 

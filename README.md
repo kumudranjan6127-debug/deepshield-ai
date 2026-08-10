@@ -113,6 +113,49 @@ process that respawns the first.
 
 ---
 
+## Running the tests
+
+```
+pip install pytest
+python -m pytest
+```
+
+That is the whole command. 241 tests, about 20 seconds, and it needs
+**no running server and no network** — it drives Flask's test client
+in-process and stubs DNS where the SSRF checks need to resolve a name.
+
+```
+python -m pytest -m security      # one category
+python -m pytest -m "not slow"    # skip anything that loads the model
+python -m pytest -q tests/test_upload.py
+```
+
+| Category | Covers |
+|---|---|
+| `api` | endpoint contracts and the shape of every response |
+| `upload` | an extension is not evidence: MIME, magic bytes, decoder, dimensions |
+| `validation` | fields, URLs, media, and the error-code vocabulary |
+| `security` | SSRF, path traversal, rate limiting, concurrency, cleanup |
+| `inference` | real vs generated, no face, two faces, tiny face, 3000px, heavy compression |
+| `video` | frame aggregation, temporal signals, the 60-frame cap, broken clips |
+| `parity` | ONNX and PyTorch agree; the model reports what it is |
+| `metrics` | the evaluation arithmetic, against hand-computed answers |
+
+Test images and clips are **generated, not committed** — `tests/conftest.py`
+builds them from the sample faces already in `training/`, so a fresh clone
+has full coverage without carrying binaries.
+
+Separately, `python scripts/regression_test.py verify` answers a different
+question — *did this change alter any behaviour?* — by diffing against a
+recorded baseline. That one does need the server running:
+
+```
+DS_RATE_LIMIT=50 npm start
+DS_RATE_LIMIT=50 python scripts/regression_test.py verify
+```
+
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |

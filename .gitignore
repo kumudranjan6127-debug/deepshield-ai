@@ -24,6 +24,10 @@ training/video_test/generated_faces.mp4
 eval_data/*
 !eval_data/README.md
 
+# ---- Test media, rebuilt by tests/conftest.py on every run ----
+tests/fixtures/
+.pytest_cache/
+
 # ---- OS / editor noise ----
 Thumbs.db
 .DS_Store
