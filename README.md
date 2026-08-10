@@ -1,11 +1,12 @@
 # DeepShield AI
 
-Deepfake detection for images and video — a MobileNetV3 we trained ourselves
-plus two verifier models, running entirely on CPU. Flask backend,
-framework-free frontend, no cloud, no GPU.
+Deepfake detection for images and video — a MobileNetV3 we trained ourselves,
+running entirely on CPU. Flask backend, framework-free frontend, no cloud,
+no GPU.
 
-The trained model ships **inside this repository**, so a fresh clone works
-after `pip install` — nothing to download separately.
+The trained model ships **inside this repository** as ONNX, so a fresh clone
+works after `pip install` — no PyTorch, no downloads, ~160 MB of
+dependencies in total.
 
 ---
 
@@ -51,11 +52,9 @@ python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 ```
 
-Roughly 1 GB of downloads, mostly PyTorch — one coffee. On Linux, install
-torch from the CPU index first (see the note at the top of
-`requirements.txt`) or you will pull the 2 GB CUDA build for nothing. On
-Windows, if importing torch later fails with a DLL error, install the
-[Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
+About 160 MB — Flask, OpenCV, Pillow and NumPy. The model runs as ONNX
+through OpenCV, so PyTorch is only needed for training or for exporting a
+new model (see the optional extras in `requirements.txt`).
 
 ### 4. Run it
 
@@ -64,11 +63,12 @@ npm start
 ```
 
 Open **http://localhost:5000**. Log in with any email and password, or use
-**Continue as guest**.
+**Continue as guest**. That is the whole setup — the model is already there.
 
-> The first image you analyze downloads the two verifier models (~930 MB,
-> cached once). Skip them entirely by running offline — the app drops to our
-> own model and keeps working.
+> **Want the ensemble?** Two pretrained verifier models can cross-check every
+> verdict. They are off by default (~1 GB of downloads and RAM, and our own
+> model scores every image in the held set correctly alone). To enable:
+> `pip install transformers torch`, then start with `DS_VERIFIERS=1`.
 
 ---
 
@@ -86,7 +86,7 @@ npm run restart    # stop, then start
 ```
   ● DeepShield backend is running   http://localhost:5000
      engine    live — real model
-     model     mobilenet_v3_large  deepshield_mobilenetv3.pth
+     model     mobilenet_v3_large  deepshield.onnx
      accuracy  val 99.9% · TPDN 100%
      processes 1
 ```
@@ -120,10 +120,10 @@ process that respawns the first.
 | `EADDRINUSE` / port 5000 busy | `npm run stop`, then `npm start` |
 | `npm start` says "did not come up" | Read `backend.log` — the real error is there |
 | `python` not recognised | Reinstall with **Add to PATH** ticked, open a new terminal |
-| Torch import fails with a DLL error (Windows) | Install the [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) |
+| Dashboard says "Simulated (demo)" | `models/deepshield.onnx` (+ its `.json`) is missing |
 | Verifier model download stalls | `set HF_HUB_DISABLE_XET=1` before starting — Hugging Face's Xet transfer fails on some networks; plain HTTP works |
-| Dashboard says "Simulated (demo)" | `models/deepshield_mobilenetv3.pth` is missing, or torch is not installed |
-| Analysis is slow the first time | Models load on first use (~10 s); afterwards a photo takes well under a second |
+| Torch import fails with a DLL error (Windows) | Only affects the optional extras — install the [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) |
+| Analysis feels slow | ~0.6 s per image including the heatmap; the first request also loads the model |
 
 ---
 
@@ -152,10 +152,11 @@ frontend/            UI — one .html per page + assets/
     fonts/ icons/    self-hosted variable fonts, favicon
 backend/             Flask server
   app.py             serves frontend + /api/upload + /api/analyze + /api/health
-  inference.py       MobileNetV3 engine: YuNet face-crop, ensemble, Grad-CAM
-models/              live checkpoint + YuNet detector; archive/ keeps every version
+  inference.py       engine: YuNet face-crop, ONNX/torch backends, saliency
+models/              deepshield.onnx (+ .json) · YuNet · archive/ every version
 training/            Kaggle/Colab notebooks + result graphs
 scripts/ds.js        server control (start/stop/status/restart)
+scripts/export_onnx.py   .pth → single-file ONNX, with a parity check
 docs/                full technical documentation
 uploads/ data/       runtime only (auto-cleaned, gitignored)
 ```
@@ -172,8 +173,15 @@ Every version stays in `models/archive/` — rolling back is one file copy, and
 `models/archive/README.md` records what each version taught us.
 
 At inference the image is capped at 1024px, the face is cropped with YuNet,
-and three models vote: ours leads, two pretrained verifiers advise. A
-Grad-CAM heatmap shows where the model actually looked.
+and the classifier runs as ONNX through OpenCV — the same weights, verified
+to agree with PyTorch to ~1e-7 on every probability. Optional verifiers can
+cross-check the verdict.
+
+The heatmap comes from **occlusion sensitivity**: patches are blanked out one
+at a time and the regions whose removal moves the score the most are the ones
+the model relied on. It needs only forward passes, so it works on both
+backends — and it measures the model's dependence rather than interpreting
+its internals.
 
 **Scope, honestly:** it detects fully AI-generated faces well (StyleGAN,
 diffusion). Face-swap video deepfakes are a different artefact family and are

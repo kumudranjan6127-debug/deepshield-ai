@@ -1,0 +1,27 @@
+{
+  "arch": "mobilenet_v3_large",
+  "classes": [
+    "fake",
+    "real"
+  ],
+  "input_size": 224,
+  "normalize": {
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ]
+  },
+  "val_accuracy": 99.9,
+  "robust_val_accuracy": 99.18,
+  "tpdn_accuracy": 100.0,
+  "dfdc_accuracy": null,
+  "test_accuracy": null,
+  "trained_on": "V3-Max multi-generator: SG1 + TPDN/SG2 + diffusion, 10 epochs, large",
+  "source_checkpoint": "deepshield_mobilenetv3.pth"
+}

@@ -1,27 +1,32 @@
-# DeepShield AI — Python dependencies
+# DeepShield AI — runtime dependencies
 #
 #   Windows:      venv\Scripts\pip install -r requirements.txt
 #   macOS/Linux:  venv/bin/pip install -r requirements.txt
 #
-# On Linux, plain `torch` pulls the ~2 GB CUDA build. This project is
-# CPU-only, so install those two from the CPU index instead:
-#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-# (Windows and macOS wheels on PyPI are already CPU builds.)
+# This is the lean install (~160 MB). The model runs as ONNX through
+# OpenCV's DNN module, so PyTorch is NOT needed to use the app.
 
-# ---- Web server ----
 flask>=3.1
-
-# ---- AI engine ----
-torch>=2.0
-torchvision>=0.15
-opencv-python>=4.8
+opencv-python>=4.8     # face detection, video frames, and the model itself
 pillow>=10.0
 numpy>=1.24
 
-# ---- Ensemble verifiers (HuggingFace; optional — the app runs without
-#      them, using our own model alone) ----
-transformers>=4.40
 
-# ---- Optional: server-side PDF reports (not used yet; the report page
-#      prints to PDF from the browser) ----
-# reportlab
+# ---------------------------------------------------------------------
+# Optional extras — install only if you need them
+# ---------------------------------------------------------------------
+#
+# 1. Training, or exporting a new ONNX from a .pth (scripts/export_onnx.py):
+#      pip install torch torchvision onnx onnxscript
+#    On Linux add --index-url https://download.pytorch.org/whl/cpu,
+#    otherwise pip pulls the ~2 GB CUDA build for nothing.
+#    The backend also falls back to a .pth checkpoint if torch is present
+#    and no ONNX export exists.
+#
+# 2. Ensemble verifiers (two pretrained HuggingFace models, ~1 GB, opt-in
+#    with DS_VERIFIERS=1):
+#      pip install transformers torch
+#
+# 3. Server-side PDF reports (not used — the report page prints from the
+#    browser):
+#      pip install reportlab
