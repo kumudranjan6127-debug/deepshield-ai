@@ -198,12 +198,21 @@ the model, the ensemble, explainability, the landing page or the ONNX
 migration. `CURRENT_STATE.md` and `MODEL_CARD.md` supersede it for anything
 factual.
 
-## 🟡 15. Feedback data has no operational path
+## 🟡 15. Feedback has a path now, but no data in it yet
 
-`POST /api/feedback` appends to `data/feedback.jsonl`, which is gitignored and
-never read by anything. The dashboard's "user-rated correct" figure is
-computed from the browser's own copy in `localStorage`, so the server-side
-file currently accumulates without a consumer.
+`POST /api/feedback` now writes to a database when `DATABASE_URL` is set,
+and `scripts/analytics.py` reads it — leading with the disagreements, which
+are candidate mislabels on real photographs and the closest thing this
+project has to the labelled data #1, #2 and #4 are all waiting for.
+
+What is still missing is **traffic**. The table is empty until people use
+the deployment and tell it when it is wrong, and feedback is only
+collectible going forward — the answers from anyone who used it before the
+store existed are gone. See `docs/ANALYTICS.md`.
+
+The dashboard's "user-rated correct" figure is still computed from the
+browser's own copy in `localStorage`, so it reflects one browser rather than
+everyone.
 
 ## 🔵 16. Face-swap deepfakes are not detected
 

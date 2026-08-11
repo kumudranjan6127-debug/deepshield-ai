@@ -29,6 +29,7 @@ from flask import Flask, g, jsonify, redirect, request, send_from_directory
 import errors
 import inference
 import security
+import store
 from config import CFG
 
 log = logging.getLogger("deepshield")
@@ -349,15 +350,14 @@ def feedback():
         raise errors.bad_field("agree", "true or false")
 
     entry = {
-        "at": datetime.now(timezone.utc).isoformat(),
         "scanId": str(d.get("scanId", ""))[:40],
         "prediction": str(d.get("prediction", ""))[:20],
         "confidence": d.get("confidence"),
         "fileType": str(d.get("fileType", ""))[:10],
         "agree": d["agree"],
+        "note": str(d.get("note", ""))[:280],
     }
-    with open(CFG.FEEDBACK_PATH, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
+    store.record_feedback(entry)
     log.info("feedback recorded: agree=%s", entry["agree"])
     return jsonify({"ok": True})
 
@@ -458,6 +458,11 @@ def analyze():
     live = inference.engine_available()
     media_path = owned = None
 
+    # The browser's own id for this scan. It links a verdict to the feedback
+    # someone later leaves on it, and identifies a scan rather than a person.
+    scan_id = str((request.get_json(silent=True) or {}).get("scanId")
+                  or request.form.get("scanId") or "")[:64]
+
     try:
         (file_name, file_type, file_size,
          frame_rate, media_path, owned) = _read_request(live)
@@ -480,10 +485,12 @@ def analyze():
             prediction, confidence, frames = echo_verdict(file_name, file_size, file_type)
 
         identity = model_identity()
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        engine_used = "live" if (live and media_path) else "simulated"
         log.info("analyzed %s (%s) -> %s %d%% in %d ms", file_name, file_type,
-                 prediction, confidence, int((time.perf_counter() - started) * 1000))
+                 prediction, confidence, latency_ms)
 
-        return jsonify({
+        payload = {
             "ok": True,
             "prediction": prediction,
             "confidence": confidence,
@@ -491,7 +498,7 @@ def analyze():
             # the engine, but that is a different request at a different
             # moment — a result read hours later from history must be able
             # to say whether a real model looked at the media or not.
-            "engine": "live" if (live and media_path) else "simulated",
+            "engine": engine_used,
             # `riskLevel` is what every page already reads; `risk` and
             # `certainty` are additive. `certainty` is the honest reading of
             # the number — evidence strength, not a probability.
@@ -499,12 +506,29 @@ def analyze():
             "risk": inference.risk_for(prediction, confidence).lower(),
             "certainty": inference.certainty_for(confidence),
             "framesAnalyzed": frames,
-            "processingTime": int((time.perf_counter() - started) * 1000),
+            "processingTime": latency_ms,
             "model": identity["name"],
             "device": identity["device"],
             "completedAt": datetime.now(timezone.utc).isoformat(),
             **extras,
-        })
+        }
+
+        # Recorded off the request thread, after the verdict is decided, and
+        # unable to fail it. No media and no filename reach the store.
+        #
+        # Guarded here as well as inside the store. The store swallows its
+        # own errors, but a mistake in *reaching* it is a different failure:
+        # while writing this, a missing import turned eleven finished
+        # verdicts into 500s. Bookkeeping must never cost a user an answer.
+        try:
+            store.record_analysis(
+                scan_id=scan_id, file_name=file_name,
+                file_type=file_type, file_bytes=file_size, result=payload,
+                identity=identity, latency_ms=latency_ms, engine=engine_used)
+        except Exception:
+            log.warning("analytics skipped for this scan", exc_info=True)
+
+        return jsonify(payload)
     finally:
         if owned:
             discard(media_path)

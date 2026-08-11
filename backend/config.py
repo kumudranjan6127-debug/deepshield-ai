@@ -93,6 +93,19 @@ class Config:
     OWN_WEIGHT = 0.75                                  # verifiers share the remainder
     VERIFIER_OVERRULE_AT = 0.85                        # and only when they all agree
 
+    # ---- Analytics store ----
+    # Off unless DATABASE_URL is set. With no database the app behaves
+    # exactly as before: feedback appends to a JSONL file and nothing else
+    # is recorded. Local development therefore needs no database at all.
+    #
+    # What is recorded is deliberately narrow. **No media, no filenames, no
+    # IP addresses.** A filename can be personal - "passport.jpg" - and an
+    # address turns analytics into tracking. What is left is the shape of a
+    # verdict, which is what the evaluation gap actually needs.
+    DATABASE_URL = _str("DATABASE_URL", "")
+    ANALYTICS = _bool("DS_ANALYTICS", True)   # recording at all
+    DB_TIMEOUT_SECONDS = _int("DS_DB_TIMEOUT", 5)
+
     # ---- Production hardening ----
     # All off or empty by default: a local run should not need TLS, and a
     # same-origin deployment needs no CORS. These exist so that putting the

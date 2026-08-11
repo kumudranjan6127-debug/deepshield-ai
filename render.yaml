@@ -13,7 +13,7 @@ services:
     name: deepshield
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt gunicorn
+    buildCommand: pip install -r requirements.txt gunicorn "psycopg[binary]"
     startCommand: >
       gunicorn --pythonpath backend app:app
       --workers 1 --threads 4 --timeout 120
@@ -49,3 +49,10 @@ services:
         value: "20"
       - key: PYTHON_VERSION
         value: 3.12.7
+      # Feedback and analytics. Without DATABASE_URL the app writes feedback
+      # to a JSONL file, which this host erases on every spin-down - so on a
+      # free tier the database is the difference between collecting the
+      # answers and losing them. Set it in the dashboard, not here: it is a
+      # credential. See docs/ANALYTICS.md for what is and is not stored.
+      - key: DS_ANALYTICS
+        value: "1"
