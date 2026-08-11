@@ -73,15 +73,65 @@ rather than queueing behind it.
 
 ## What to expect
 
-| | |
-|---|---|
-| Cold start | The free tier sleeps after 15 minutes. First request wakes the container and loads the model (~0.4 s on top of boot) |
-| Image analysis | ~0.45 s, most of it the occlusion heatmap |
-| Video | ~50 ms per sampled frame — 3 s for a 60-second clip |
-| Peak memory | ~260 MB |
+Render's free instance is **512 MB RAM and 0.1 CPU**. Memory is not the
+problem — the app peaks at 260 MB. **CPU is.**
 
-The health check warms the model: `/api/health` asks the engine what it is,
-which loads it. So the first real user request is not the one that pays.
+This workload is CPU-bound and the benchmark measured it using ~2.2 cores.
+On a 0.1 CPU allocation the same work has far less to run on, so expect
+analysis to be **substantially slower than the local figures** below. How
+much slower depends on whether Render's 0.1 is a hard ceiling or a
+burstable baseline, which their documentation does not say — the first
+deploy is what settles it.
+
+| | Measured locally (4 cores) | On 0.1 CPU |
+|---|---|---|
+| Image | ~0.45 s | slower, possibly several seconds |
+| Video, 60 frames | ~3 s | slower still |
+| Cold start | — | **~1 minute**, per Render's docs |
+| Peak memory | 260 MB | fits in 512 MB |
+
+### What actually helps
+
+Two knobs already exist as environment variables. Both were measured before
+being recommended:
+
+**`DS_MAX_FRAMES=20`** — halves video latency.
+
+| Cap | Frames | Time | Verdict |
+|---|---|---|---|
+| 60 (default) | 60 | 3.29 s | deepfake 98% |
+| 30 | 30 | 2.02 s | deepfake 98% |
+| **20** | 20 | **1.62 s** | deepfake 98% |
+| 12 | 12 | 0.90 s | deepfake 98% |
+
+The verdict did not move — but that clip is uniformly manipulated. Fewer
+frames means less evidence for a clip manipulated only in part, which is
+exactly the case the median/top-k combiner exists to catch. Twenty is a
+reasonable trade on a slow box; raise it if partial manipulation matters
+more than latency.
+
+**`DS_OCCLUSION_GRID` — do not bother.** Dropping the heatmap from 36
+forwards to 9 saved only 15% and then plateaued, because fixed work
+elsewhere dominates once the grid is small. A coarser explanation is not
+worth 15%.
+
+### Cold start, and how to avoid it
+
+Render spins a free service down after 15 minutes and takes about a minute
+to bring it back. That minute lands on whoever opens the link first, which
+during a demo is the worst possible person.
+
+The free allowance is **750 instance hours per month**, and a 31-day month
+is 744 hours. So a service kept permanently awake by a five-minute uptime
+ping still fits inside the free tier — with about six hours to spare.
+
+Two caveats. The 750 hours are **per workspace**, so this only works with
+one free service. And there is no margin: a second service, or a month where
+something restarts oddly, and the allowance is gone.
+
+The health check warms the model on start: `/api/health` asks the engine what
+it is, which loads it. So the first real user request is not the one that
+pays for loading — only for the container waking up.
 
 ---
 

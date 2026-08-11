@@ -38,5 +38,14 @@ services:
         value: "20"
       - key: DS_LOG_JSON
         value: "1"
+      # The free instance is 0.1 CPU and this workload is CPU-bound - the
+      # benchmark uses ~2.2 cores locally. Halving the sampled frames halves
+      # video latency (measured: 60 frames 3.29s -> 20 frames 1.62s) and left
+      # the verdict unchanged on the test clip. It does mean less evidence
+      # for a clip that is only partly manipulated, which is the case the
+      # median/top-k combiner exists for. Raise it if that matters more than
+      # latency.
+      - key: DS_MAX_FRAMES
+        value: "20"
       - key: PYTHON_VERSION
         value: 3.12.7
