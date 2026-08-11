@@ -113,6 +113,30 @@ process that respawns the first.
 
 ---
 
+## Putting it online
+
+`render.yaml` is committed, so on Render it is **New → Blueprint → pick the
+repo**. Everything else is in [docs/DEPLOY.md](docs/DEPLOY.md).
+
+Four things differ from a local run, and the first one is the classic:
+
+| | Local | Server |
+|---|---|---|
+| OpenCV | either build | **`opencv-python-headless`** — the desktop build needs `libGL`, which no server container has |
+| Bind | `127.0.0.1` | **`0.0.0.0`** |
+| Server | Flask's built-in | **gunicorn**, one worker |
+| TLS | none | terminated by the platform; set `DS_TRUST_PROXY=1` |
+
+One worker is not a shortcut: the model peaks at 260 MB against a 512 MB
+tier, and the rate limiter is in-process, so a second worker would both fail
+to fit and double everyone's request budget.
+
+Check a deploy with `curl https://<app>/api/version` — if it says
+`"engine": "simulated"`, the model files did not reach the container and every
+verdict is a placeholder.
+
+---
+
 ## Documentation
 
 | Document | Answers |

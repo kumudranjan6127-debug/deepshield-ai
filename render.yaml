@@ -1,0 +1,42 @@
+# Render blueprint. `render.com/deploy` reads this; nothing here is secret.
+#
+# One worker, deliberately. The model peaks at ~260 MB of RSS and the free
+# tier gives 512 MB, so a second worker would not fit — and one worker also
+# keeps the rate limiter and the concurrency gate correct, since both are
+# in-process and two workers would mean two independent limits.
+#
+# Threads rather than workers: the concurrency gate already caps analyses at
+# two, so the extra threads serve health checks and static files while an
+# analysis runs instead of queueing behind it.
+services:
+  - type: web
+    name: deepshield
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt gunicorn
+    startCommand: >
+      gunicorn --pythonpath backend app:app
+      --workers 1 --threads 4 --timeout 120
+      --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/health
+    envVars:
+      # Bind to every interface. The local default is 127.0.0.1 so a
+      # development run is not exposed by accident; a container must not
+      # keep that default or the service is unreachable.
+      - key: DS_HOST
+        value: 0.0.0.0
+      # Render terminates TLS and forwards the original scheme. Without
+      # TRUST_PROXY the app cannot tell, and would refuse every request as
+      # insecure once FORCE_HTTPS is on.
+      - key: DS_TRUST_PROXY
+        value: "1"
+      - key: DS_FORCE_HTTPS
+        value: "1"
+      # 5/min is two scans a minute once upload and analyze are counted -
+      # too tight for someone trying the demo. Still protective.
+      - key: DS_RATE_LIMIT
+        value: "20"
+      - key: DS_LOG_JSON
+        value: "1"
+      - key: PYTHON_VERSION
+        value: 3.12.7

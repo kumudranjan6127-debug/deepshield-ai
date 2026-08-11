@@ -7,7 +7,14 @@
 # OpenCV's DNN module, so PyTorch is NOT needed to use the app.
 
 flask>=3.1
-opencv-python>=4.8     # face detection, video frames, and the model itself
+opencv-python-headless>=4.8   # face detection, video frames, and the model
+                              # itself. HEADLESS on purpose: the app calls no
+                              # cv2 GUI function, and the desktop build needs
+                              # libGL, which a server container does not have.
+                              # Installing the wrong one is the single most
+                              # common way a deploy of this shape fails.
+                              # Already have opencv-python? Uninstall it first:
+                              # the two packages conflict.
 pillow>=10.0
 numpy>=1.24
 
@@ -27,12 +34,18 @@ numpy>=1.24
 #    with DS_VERIFIERS=1):
 #      pip install transformers torch
 #
-# 3. Running the test suite:
+# 3. Serving it in production:
+#      pip install gunicorn
+#    Flask's built-in server is single-threaded and not meant to face the
+#    internet. See docs/DEPLOY.md for the exact command and why it uses
+#    one worker.
+#
+# 4. Running the test suite:
 #      pip install pytest
 #    Then `python -m pytest` from the project root. The suite needs no
 #    server and no network; it builds its own test media from the sample
 #    faces already in training/.
 #
-# 4. Server-side PDF reports (not used — the report page prints from the
+# 5. Server-side PDF reports (not used — the report page prints from the
 #    browser):
 #      pip install reportlab
