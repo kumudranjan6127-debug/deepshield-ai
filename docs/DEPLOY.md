@@ -140,11 +140,63 @@ these tiers. Worth knowing before assuming the deploy is 17 MB.
 
 ---
 
+## Railway
+
+Works with no code change — the committed `Procfile` is what Railway reads.
+Railway does not read `render.yaml`, so the environment has to be set by hand:
+
+```
+DS_HOST=0.0.0.0
+DS_TRUST_PROXY=1
+DS_FORCE_HTTPS=1
+DS_RATE_LIMIT=20
+DS_LOG_JSON=1
+```
+
+`PORT` is injected by Railway and already read by `config.py`.
+
+### The cost question, with the numbers
+
+Railway bills usage rather than granting hours. At the published rates
+(**$10 / GB / month** for RAM) and this app's measured **~140 MB idle
+footprint**:
+
+```
+0.14 GB x $10/month  =  ~$1.40/month, idle
+Free plan credit     =   $1.00/month
+```
+
+Railway's own documentation on credit exhaustion:
+
+> *"if your credit balance reaches zero, your subscription will be cancelled
+> ... you will no longer be able to deploy to Railway"*
+
+So the **Free plan runs out in roughly three weeks** and stops, sooner with
+traffic. It is not a place to leave something running.
+
+| | Railway Free | Railway Hobby ($5/mo) | Render Free |
+|---|---|---|---|
+| Runs for | ~20 days, then stops | indefinitely | indefinitely |
+| Sleeps when idle | no | no | after 15 min |
+| First visit | instant | **instant** | 30–60 s cold start |
+| Card required | no | yes | no |
+| RAM cap | 0.5 GB | 48 GB | 0.5 GB |
+
+The app peaks at 260 MB, so 0.5 GB is enough everywhere.
+
+**Which to pick.** If $5/month is acceptable, Railway Hobby is the better
+demo: the Render free tier's cold start is 30–60 seconds, and the worst
+moment for that is someone opening the link in front of an audience. If it
+has to be free, Render is the one that keeps running.
+
+Railway's Free plan is the option to avoid — three weeks of uptime followed
+by a manual restart every month is worse than either alternative.
+
 ## Other platforms
 
-The `Procfile` covers anything that reads one (Railway, Heroku-likes). The
-same four rules apply everywhere: headless OpenCV, bind `0.0.0.0`, gunicorn,
-one worker.
+The `Procfile` covers anything that reads one (Heroku-likes, Fly, Koyeb).
+The same four rules apply everywhere: headless OpenCV, bind `0.0.0.0`,
+gunicorn, one worker.
 
 Fly.io and Docker platforms need a Dockerfile, which this repository does not
 have — deliberately. The original constraint was "runs on a laptop with two
