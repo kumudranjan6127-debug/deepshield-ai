@@ -21,13 +21,10 @@
 
 ## 1. Detection quality
 
-**These numbers are real and they are also nearly meaningless. Read the
-second row before the first.**
-
 | Metric | Value | Basis |
 |---|---|---|
-| Images scored | **92** | 24 real, 68 fake |
-| **Independent groups** | **12** | the honest sample size — images inside a group are correlated |
+| Images scored | **592** | 524 real, 68 fake |
+| **Independent groups** | **512** | the honest sample size — 501 of them on the real side |
 | Accuracy | **100.00%** | at threshold 0.50 |
 | Precision | **100.00%** | of everything called fake |
 | Recall | **100.00%** | of the fakes present |
@@ -35,36 +32,62 @@ second row before the first.**
 | Specificity | **100.00%** | of the real images |
 | ROC-AUC | **1.0000** | ranking quality |
 | PR-AUC | **1.0000** | |
-| **False-positive rate** | **0.00%** | **a real photograph called fake** |
-| False-negative rate | **0.00%** | a deepfake called real |
+| **False-positive rate** | **0.00%** — 0 of 524 | **95% upper bound 0.60%** (see below) |
+| False-negative rate | **0.00%** | |
 | Brier score | **0.0006** | calibration, 0 is perfect |
-| ECE | **0.0240** | calibration error |
+| ECE | **0.0242** | calibration error |
 | Cross-dataset accuracy | *not measured* | no generator outside the training families is present |
 | DFDC (face-swap) | *not measured* | see §3 |
 
-### Why 100% is not a result
+### The false-positive rate
 
-The real class is **one person**. Twenty-four frames of one recording is one
-independent observation, not twenty-four. The fake class is five StyleGAN2
-stills, their processed variants, and one clip — twelve groups in total.
+**Zero false positives across 501 distinct people.**
 
-A detector that scores 100% on twelve groups has told you almost nothing. It
-has ruled out being *broken*; it has not demonstrated being *good*. The
-project's own harness prints the group count next to the sample size for
-exactly this reason.
+The real class is **LFW** — Labeled Faces in the Wild, press and web
+photographs of 501 different people, one photo each. This is deliberately
+**not FFHQ**: FFHQ is the entire real class this model trained on, and
+scoring against it would measure how well the model memorised its own
+training distribution. LFW is a different source, different cameras and a
+different decade of JPEG — out-of-domain by construction.
 
-What this does establish, narrowly:
+`0 / 524` does not mean the rate is zero. With no events in *n* independent
+trials the honest statement is the upper bound:
 
-- the pipeline runs end to end and the two classes are separated by a wide
-  margin (mean P(fake) 0.975 vs 0.022)
-- detection survives phone, screenshot, messaging-app and re-encode
-  processing on this sample (§2)
-- **no false positive was produced on the one authentic subject available**
+> **95% confidence: the false-positive rate is below 0.60%** (rule of three,
+> 3 / 501 independent people)
+
+### The two distributions do not overlap
+
+| | min | median | max |
+|---|---|---|---|
+| real (524) | 0.0096 | **0.0240** | 0.1074 |
+| fake (68) | 0.9689 | **0.9757** | 0.9796 |
+
+The highest-scoring real photograph is **0.1074** and the lowest-scoring
+fake is **0.9689** — a gap of **0.86 with nothing in it**. The closest call
+on the real side was a photograph of Johnny Depp, and it was still eight
+times below the threshold.
+
+At a 1% false-positive budget the threshold could sit at **0.034** and still
+detect 100% of the fakes. The operating point has enormous headroom on this
+data.
+
+### What this does and does not establish
+
+**Does:** on 501 out-of-domain photographs of real people, this model did not
+produce a single false accusation, and the margin was not close.
+
+**Does not:** LFW is press and web photography — 250×250, loosely cropped,
+carrying 2000s web compression. It is not a photograph off a modern phone,
+which is what the app actually receives. The fake side is also still narrow:
+68 images, all fully-generated faces, no face-swaps (§3).
 
 ### Per source
 
 | Class | Source | n | Mean P(fake) | Outcome |
 |---|---|---|---|---|
+| real | `lfw` | 500 | 0.024 | **0.00% called fake** |
+| real | `portrait` | 24 | 0.022 | **0.00% called fake** |
 | fake | `tpdn` | 5 | 0.974 | 100.00% detected |
 | fake | `orig` | 5 | 0.975 | 100.00% detected |
 | fake | `phone` | 5 | 0.974 | 100.00% detected |
@@ -72,7 +95,32 @@ What this does establish, narrowly:
 | fake | `social` | 5 | 0.975 | 100.00% detected |
 | fake | `reencode` | 5 | 0.975 | 100.00% detected |
 | fake | `synthetic_clip` | 38 | 0.976 | 100.00% detected |
-| real | `portrait` | 24 | 0.022 | **0.00% called fake** |
+
+### The model is bimodal, and that breaks the certainty bands
+
+| Band | Range | n | Observed accuracy |
+|---|---|---|---|
+| Very strong evidence | 90–100 | **591** | 100.00% |
+| Strong evidence | 70–90 | 1 | 100.00% |
+| Uncertain | 30–70 | **0** | never occurs |
+| Low evidence | 0–30 | **0** | never occurs |
+
+**591 of 592 verdicts land in one band.** The model answers roughly 0.02 or
+roughly 0.97 and almost nothing between, so a four-band vocabulary describes
+a distribution this model does not have. Two of the four bands were already
+known to be unreachable by construction; this shows a third is unused in
+practice.
+
+That is a finding about the *model*, not the bands: a detector this confident
+on every input is a detector that will be just as confident when it is wrong.
+Nothing here has yet made it wrong.
+
+Reproduce:
+
+```bash
+python scripts/fetch_real_faces.py --count 500
+python scripts/evaluate.py --data eval_data --target-fpr 0.01
+```
 
 ---
 
@@ -103,7 +151,7 @@ forgotten. Each row names the input that would produce it.
 
 | Missing | Why it matters | What would produce it |
 |---|---|---|
-| **False-positive rate at scale** | The expensive error. One authentic subject is not a rate | A few hundred genuine photographs in `eval_data/real/photos` |
+| **False-positive rate on phone photos** | LFW is press photography; the app receives phone snapshots | A few hundred ordinary phone photographs in `eval_data/real/photos` |
 | **Cross-dataset accuracy** | In-domain accuracy says how well a model memorised the generators it saw. This says what a user gets | A generator outside the training families, then `--seen sg1,sg2,tpdn,diffusion` |
 | **DFDC / face-swap** | The headline limitation: a real DFDC video scored **97% "real"** | DFDC face crops in `eval_data/fake/dfdc` |
 | **Calibration at scale** | The percentage the UI shows carries no probabilistic promise | The same labelled set; `evaluate.py` already prints ECE, MCE, Brier and a reliability diagram |

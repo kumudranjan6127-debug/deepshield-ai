@@ -8,22 +8,20 @@ Severity: 🔴 wrong output or wrong information · 🟡 works but flawed ·
 
 ---
 
-## 🟡 1. The false-positive rate has never been measured
+## 🟡 1. The false-positive rate is measured on press photos, not phone photos
 
-Every figure the project reports is accuracy: 99.90% validation, 99.18%
-robust, 100% TPDN. None of them say how often an **authentic photograph is
-called fake**, which is the error that actually costs someone something.
+**Resolved in part.** 0 false positives across 501 distinct people (LFW),
+95% upper bound 0.60%. Deliberately not FFHQ, which is the model's own
+training real class. See `BENCHMARK.md` §1.
 
-Measuring it needs genuine photographs scored through the deployed
-pipeline, and this repository has none — the training real class was FFHQ,
-which lives on Kaggle. Two false positives have been found by hand (a
-2687px portrait at 0.94, a camera original at 0.95); both were fixed, but
-by inspection rather than measurement.
+What remains: LFW is 250x250 press photography carrying 2000s web
+compression. The app receives photographs off a modern phone, and **both
+false positives ever found by hand were exactly that kind of image** — a
+2687px portrait at 0.94 and a pristine camera original at 0.95. LFW would
+have caught neither, because its images are neither large nor pristine.
 
-The tooling now exists and the missing piece is only data.
-
-**Fix:** fill `eval_data/real/photos` and run
-`python scripts/evaluate.py --target-fpr 0.01`. See `eval_data/README.md`.
+**Fix:** a few hundred ordinary phone photographs in `eval_data/real/photos`,
+then `python scripts/evaluate.py --target-fpr 0.01`.
 
 ## 🟡 2. Calibration has never been measured
 
@@ -52,6 +50,12 @@ unreachable by construction, and "Uncertain" (30-70) can only ever hold
 the top half of its range. Proven, not suspected —
 `tests/test_metrics.py` scores 4,000 random predictions and the bottom
 band stays empty.
+
+**And now measured on real data:** across 592 scored images, 591 landed in
+`very_strong` and one in `strong`. `uncertain` and `low_evidence` were both
+empty. Three of the four bands are unused — two impossible by construction,
+one unused in practice, because the model answers roughly 0.02 or 0.97 and
+almost nothing between.
 
 The band table was specified against `confidence`. Two ways out, both
 deferable until there is data:

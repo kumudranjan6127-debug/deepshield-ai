@@ -92,34 +92,43 @@ best rather than the one that fits the training distribution best.
 - The nine held images are a sanity check, not a benchmark. No standard
   benchmark (FaceForensics++, Celeb-DF, DFDC) has been run, so these numbers
   cannot be compared against published results.
-- **Every figure above is accuracy.** Precision, recall, F1, specificity,
-  ROC-AUC, PR-AUC, false-positive rate and false-negative rate have never
-  been computed for V3. Accuracy on a balanced set hides the one thing that
-  decides whether a detector is usable — see below.
+- **Every figure above is accuracy on data related to training.** The full
+  metric set — precision, recall, F1, specificity, ROC-AUC, PR-AUC and the
+  false-positive rate — is measured separately against an out-of-domain set
+  and reported in [BENCHMARK.md](BENCHMARK.md).
 
-### The number that is missing
+### The number that was missing
 
-**V3's false-positive rate is unmeasured.**
+**Measured 2026-08-11: 0 false positives across 501 distinct people, 95%
+upper bound 0.60%** — on LFW, deliberately not FFHQ. The real and fake score
+distributions do not overlap: highest real 0.1074, lowest fake 0.9689. Full
+detail in [BENCHMARK.md](BENCHMARK.md).
+
+What follows is why that measurement mattered, and what it still does not
+cover: LFW is press photography, and the app receives phone photographs.
 
 A false positive is an authentic photograph the model calls fake. It is the
 expensive error: a missed forgery leaves someone where they already were, an
-accusation puts them somewhere worse. Nothing in the table above measures it,
-because measuring it needs a set of genuine photographs and this repository
-has none — the training real class was FFHQ, which lives on Kaggle, and no
-labelled real set has ever been scored through the deployed pipeline.
+accusation puts them somewhere worse. Nothing in the training table measures
+it, because the real class there *is* the training distribution.
 
-Two observations that are *not* a substitute for that measurement, but are
-the reason it is worth doing:
+`0 / 524` is not a claim that the rate is zero. With no events in 501
+independent trials, the honest statement is the 95% upper bound: **below
+0.60%**.
 
-- A 2687px authentic portrait once scored **0.94 fake**, and a pristine
-  camera original **0.95 fake**. Both were fixed (resolution cap, compression
-  normalisation) — but they were found by hand, one image at a time.
-- Validation is 99.90% on a set whose real class is FFHQ only. FFHQ is
-  curated, aligned, and nothing like a photo off a phone.
+The gap that remains is specific. Both false positives ever found by hand
+were large or pristine images:
 
-`eval_data/README.md` says exactly which folders to fill and
-`scripts/evaluate.py` produces the number. It is one afternoon of work and
-it is the highest-value measurement left in this project.
+- a 2687px authentic portrait scored **0.94 fake** (fixed by the 1024px cap)
+- a pristine camera original scored **0.95 fake** (fixed by the JPEG round trip)
+
+LFW would have caught neither — its images are 250×250 press photographs,
+neither large nor pristine. Phone photography is still unscored.
+
+`scripts/fetch_real_faces.py` builds the LFW set and
+`scripts/evaluate.py --target-fpr 0.01` produces the number. The remaining
+gap — ordinary phone photographs — is the highest-value data this project
+still lacks.
 
 ### What has been measured with the new harness
 
@@ -145,20 +154,22 @@ false-positive rate, and nothing about any other generator.
 
 ### Calibration — what the percentage is allowed to claim
 
-**Unmeasured.** No ECE, Brier score or reliability curve has ever been
-computed for this model, so the confidence percentage carries no
-probabilistic promise. `/api/health` says so directly: `"calibrated": false`.
-
-The distinction the project now holds to:
+**Measured, and the shape is the problem.** ECE 0.0242, MCE 0.1074, Brier
+0.0006 across 592 images. Those are good numbers for a model whose outputs
+are almost all 0.02 or 0.97 — and that is exactly the caveat.
 
 | Question | Answered by | Status |
 |---|---|---|
-| Does it rank fakes above reals? | ROC-AUC | measurable, tooling ready |
-| When it says 0.9, is it right 90% of the time? | ECE, Brier, reliability | **never measured** |
+| Does it rank fakes above reals? | ROC-AUC | **1.0000** on the measured set |
+| When it says 0.9, is it right 90% of the time? | ECE, Brier, reliability | **0.0242** — but over two occupied bins |
 
-A network trained with cross-entropy and selected on validation accuracy is
-usually over-confident, so the honest assumption is that 0.97 overstates the
-evidence. That is the reason for the wording change:
+`/api/health` still reports `"calibrated": false`. A reliability curve with
+two populated bins has demonstrated nothing about the range in between, and
+**591 of 592 verdicts landed in a single certainty band**.
+
+A network trained with cross-entropy is usually over-confident. This one is
+not, on this data — but this data never put it in a difficult position. That
+is still the reason for the wording change:
 
 > ~~97% probability this image is fake~~
 > **Detection confidence: 97% — very strong evidence**

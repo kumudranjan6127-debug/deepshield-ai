@@ -17,10 +17,10 @@ Two specific reasons, before the general one:
 
 - **A real DFDC deepfake video scored 97% "real".** Face-swaps are the common
   video deepfake and the model does not detect them (§3).
-- **The false-positive rate has never been measured at scale.** The only
-  authentic subject ever scored through the deployed pipeline is one person
-  (§2). An accusation against a real photograph is the expensive error, and
-  its frequency is unknown.
+- **The false-positive rate is measured on one condition only.** Zero false
+  positives across 501 press photographs (§2) — but the app receives photos
+  off a phone, and that condition has never been scored. Both false positives
+  ever found by hand were exactly that kind of image.
 
 The general reason: a confident number from an uncalibrated model is a
 ranking wearing a percentage's clothes. The interface says "detection
@@ -28,26 +28,31 @@ confidence", not "probability", for exactly this reason.
 
 ---
 
-## 2. The false-positive rate is unmeasured
+## 2. The false-positive rate is measured, on one condition only
 
-Every headline figure is accuracy on data related to training: 99.90%
-validation, 99.18% robust, 100% on a held-out StyleGAN2 set. None of them
-says how often an authentic photograph is called fake.
+**0 false positives across 501 distinct people.** 95% upper bound **0.60%**
+(rule of three). The real set is LFW — press and web photographs, one per
+person, deliberately not FFHQ because FFHQ is what the model trained on.
 
-Measuring it needs genuine photographs scored through the deployed pipeline.
-The repository has one authentic subject — 24 frames of one recording, which
-is **one independent observation**, on which no false positive occurred.
+The two distributions do not overlap: the highest-scoring real photograph is
+0.1074, the lowest-scoring fake is 0.9689.
 
-Two false positives have been found by hand and fixed:
+**What is still unknown.** LFW is 250×250 press photography carrying 2000s
+web compression. The app receives photographs off a modern phone — higher
+resolution, different sensor noise, different compression history — and that
+condition has never been scored. The two false positives ever found by hand
+were both of exactly that kind:
 
 | Input | Scored | Cause | Fix |
 |---|---|---|---|
 | 2687px authentic portrait | 0.94 fake | downsampling path unlike training | inputs capped at 1024px |
 | Pristine camera original | 0.95 fake | compression domain unlike training | JPEG q88 round trip |
 
-Both were found by inspection, one image at a time. That is not a method.
+Both are fixed, and LFW would not have caught either — its images are neither
+large nor pristine. A phone-photo set remains the most valuable data this
+project does not have.
 
-**What would close this:** a few hundred genuine photographs in
+**What would close it:** a few hundred ordinary phone photographs in
 `eval_data/real/photos`, then `python scripts/evaluate.py --target-fpr 0.01`.
 
 ---
@@ -95,20 +100,28 @@ being downloaded and scored.
 
 ---
 
-## 6. Calibration has never been measured
+## 6. Calibration is measured, and the shape of it is the problem
 
-No ECE, Brier score or reliability curve exists for this model on real data.
-`/api/health` reports `"calibrated": false` for that reason.
+Measured on 592 images: **ECE 0.0242, MCE 0.1074, Brier 0.0006**. Those look
+excellent, and on this data they are — but they are the calibration of a model
+whose outputs are almost all 0.02 or 0.97. `/api/health` still reports
+`"calibrated": false`, because a reliability curve with two occupied bins has
+not demonstrated calibration anywhere in between.
+
+**591 of 592 verdicts land in the `very_strong` band.** A four-band vocabulary
+describes a distribution this model does not have, and a detector this
+confident on every input will be just as confident when it is wrong.
 
 A network trained with cross-entropy and selected on validation accuracy is
-usually **over-confident**: it will report 0.97 on evidence worth 0.80. The
-honest assumption is that the percentage overstates the case.
+usually over-confident. This one is not, on this data — but this data never
+put it in a difficult position. Every image was easy.
 
 The certainty bands (`very_strong`, `strong`, `uncertain`, `low_evidence`)
 are a **vocabulary, not a finding** — the cut points were specified, not
-derived from data. And the lowest band is unreachable by construction:
-`confidence` is `max(p, 1−p)` for two classes, so it never falls below 50.
-Proven by scoring 4,000 random predictions, not argued.
+derived from data. Two of the four are unreachable by construction —
+`confidence` is `max(p, 1−p)` for two classes, so it never falls below 50 —
+and the measurement above shows a third goes unused in practice. One band
+carries 591 of 592 verdicts.
 
 ---
 
