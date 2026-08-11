@@ -1,5 +1,12 @@
 # DeepShield AI
 
+**Live:** <https://deepshield-nque.onrender.com>  ·  `/api/version` reports what is actually loaded.
+
+> Free tier: it sleeps after 15 minutes, so the first visit takes
+> about a minute to wake. Analysis then takes ~4 s an image — the
+> instance has 0.1 CPU against the 2.2 cores this workload uses
+> locally. Numbers in [docs/DEPLOY.md](docs/DEPLOY.md).
+
 Deepfake detection for images and video — a MobileNetV3 we trained ourselves,
 running entirely on CPU. Flask backend, framework-free frontend, no cloud,
 no GPU.

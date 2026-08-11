@@ -110,10 +110,67 @@ exactly the case the median/top-k combiner exists to catch. Twenty is a
 reasonable trade on a slow box; raise it if partial manipulation matters
 more than latency.
 
-**`DS_OCCLUSION_GRID` — do not bother.** Dropping the heatmap from 36
-forwards to 9 saved only 15% and then plateaued, because fixed work
-elsewhere dominates once the grid is small. A coarser explanation is not
-worth 15%.
+**`DS_OCCLUSION_GRID` — available, but not recommended.**
+
+| Grid | Forwards | Time | Saving | Regions reported |
+|---|---|---|---|---|
+| 6x6 (default) | 36 | 0.555 s | — | mouth, eye |
+| 5x5 | 25 | 0.541 s | 3% | eye, mouth |
+| 4x4 | 16 | 0.376 s | **32%** | eye, mouth |
+| 3x3 | 9 | 0.314 s | 43% | eye only |
+
+A third off is real, and on a 0.1 CPU box a third of four seconds is worth
+having. The reason to leave it alone is not speed — it is that **the
+explanation changes**. At 4x4 the two regions swap rank; at 3x3 the mouth
+disappears entirely. The heatmap in this project is a measurement rather
+than decoration, and trading its fidelity for 1.3 seconds is a real cost,
+not a free one. Your call — it is one environment variable.
+
+*(An earlier version of this table said "15% and then plateaus". That was
+measured wrong; see the note on default arguments below.)*
+
+### Measured on the live deploy
+
+Free instance, `deepshield-nque.onrender.com`, after warm-up:
+
+| | Local (4 cores) | Render free (0.1 CPU) | Ratio |
+|---|---|---|---|
+| Image, server-side | 0.45 s | **3.98 s** | ~9x |
+| Image, round trip | — | 4.8 s | |
+| Video, 13 frames | 0.65 s | **9.1 s** | ~14x |
+| `/api/version` | — | 1.5 s | |
+
+**0.1 CPU is burstable, not a hard ceiling.** A hard cap against the ~2.2
+cores this workload uses locally would have been 20x or worse; 9x says the
+instance bursts above its baseline.
+
+Four seconds an image is usable. Video is the one to watch: 13 frames took
+9 seconds, so a clip that reaches the 20-frame cap will take around 14, and
+the default 60 would have taken three quarters of a minute. `DS_MAX_FRAMES=20`
+is doing real work here.
+
+Verified live at the same time: all five hardening headers including HSTS
+(which only appears when `DS_TRUST_PROXY` is working), `http://` redirecting
+to `https://`, and the frontend serving.
+
+### A note on default arguments
+
+Two of the tuning knobs are read as default arguments:
+
+```python
+def predict_video(self, ..., max_frames=CFG.MAX_VIDEO_FRAMES)
+def explain(self, ..., grid=CFG.OCCLUSION_GRID)
+```
+
+Python evaluates those **once, at import**. Setting the environment variable
+works correctly — `config.py` reads the environment before those definitions
+run — but mutating `CFG` at runtime does nothing, and a benchmark that does
+so will report that the knob has no effect.
+
+This caught me twice: once measuring the frame cap, once measuring the
+occlusion grid, and in both cases I published a wrong conclusion before
+re-testing through the environment. If you are measuring one of these, set
+the environment variable and start a fresh process.
 
 ### Cold start, and how to avoid it
 
