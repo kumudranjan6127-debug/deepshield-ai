@@ -20,6 +20,11 @@ frontend/assets/js/firebase-config.js
 # generated fallback is ignored.
 training/video_test/generated_faces.mp4
 
+# ---- V4 dataset build (raw media, crops, manifests) ----
+# Raw datasets are not redistributable and crops are derived from them.
+# The seal itself lives in docs/v4_sealed_groups.txt so it survives a clean.
+datasets/
+
 # ---- Evaluation datasets (large, licensed, reproducible from README) ----
 eval_data/*
 !eval_data/README.md

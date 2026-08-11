@@ -1,0 +1,10 @@
+# DeepShield V4 - sealed evaluation groups.
+#
+# Written before training. Never split, never trained on.
+# Removing a line here un-seals data: do it deliberately, in a commit,
+# or not at all.
+#
+# Empty because no sealed dataset has been obtained yet. Celeb-DF v2 and
+# DeeperForensics-1.0 are sealed by dataset name regardless of this file
+# (scripts/prepare/sealed.py); this list is the third layer, which survives
+# a folder being renamed. It fills in when those datasets arrive.
