@@ -81,6 +81,24 @@ Supabase's free tier does not expire (500 MB Postgres, paused after a week
 of inactivity, data retained), and Neon is a similar shape. Check the terms
 before relying on either — they change.
 
+### Supabase: take the Session Pooler string, not the Direct one
+
+Supabase offers three connection strings and shows the wrong one first.
+
+| Method | Port | IPv4 | Use it? |
+|---|---|---|---|
+| **Direct connection** | 5432 | **paid add-on only** — IPv6 by default | **No.** This is the one shown first, and on an IPv4-only host it simply will not connect |
+| **Session pooler** | 5432 (pooler host) | yes, all tiers | **Yes** |
+| Transaction pooler | 6543 | yes | No — *"transaction mode does not support prepared statements"*, and psycopg uses them |
+
+The session-pooler host looks like
+`aws-0-<region>.pooler.supabase.com`, and the username carries the project
+ref: `postgres.<projectref>`.
+
+A paused project (a week without traffic) refuses connections. That is
+survivable by design — the store logs the failure and the app carries on
+serving verdicts — but nothing is recorded until it is resumed.
+
 ---
 
 ## Reading it
