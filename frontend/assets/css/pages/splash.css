@@ -11,9 +11,14 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--s-4);
+  padding: var(--s-4) var(--s-3) var(--s-4);
   text-align: center;
   cursor: pointer; /* whole screen is click-to-skip */
+}
+/* Once the content is tall enough to fill the viewport, stop centring and
+   let it flow from the top - otherwise it overflows in both directions. */
+@media (max-height: 760px) {
+  .splash { justify-content: flex-start; padding-top: var(--s-4); }
 }
 
 /* ---- Logo tile + pulse rings ---- */
@@ -84,7 +89,7 @@
 
 /* ---- Boot progress ---- */
 .splash-progress {
-  width: 240px;
+  width: min(340px, 90vw);
   margin-top: var(--s-4);
 }
 
@@ -102,21 +107,26 @@
   text-align: right;
 }
 
-/* Engine boot log — three lines that light up as "systems" come online */
+/* Engine boot log — a readout, not debug output.
+   Two aligned columns so the values line up, and nothing wraps: the engine
+   line carries a model name and a runtime, which is far wider than the
+   240px this block used to be. */
 .boot-log {
-  margin-top: var(--s-2);
+  margin-top: var(--s-3);
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  align-items: flex-start;
-  min-height: 54px;      /* reserve space, no jump */
-  font-size: 11px;
+  gap: 6px;
+  align-items: stretch;
+  min-height: 76px;      /* four lines reserved, no jump */
+  font-size: 11.5px;
   text-align: left;
 }
 .boot-line {
-  display: flex;
+  display: grid;
+  grid-template-columns: 14px 62px 1fr;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  white-space: nowrap;
   color: var(--text-3);
   opacity: 0;
   transform: translateY(4px);
@@ -126,14 +136,237 @@
 .boot-line .tick { color: var(--success); opacity: 0; transition: opacity var(--t-fast) var(--ease); }
 .boot-line.done .tick { opacity: 1; }
 
-/* ---- Version footer ---- */
+/* ---- Version footer ----
+   In flow, pushed down by margin-top rather than pinned with `position:
+   absolute`. It was absolute before, which meant the centred column grew
+   straight through it as soon as the content got taller - the badge ended
+   up sitting on top of the boot log. */
 .splash-foot {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: var(--s-5);
+  margin-top: auto;
+  padding-top: var(--s-4);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--s-1);
+}
+
+/* ============================================================
+   Scan stage — the boot sequence animates the real pipeline:
+   detect, place the five YuNet landmarks, close the 0.35-margin
+   crop, sweep the 6x6 occlusion grid. Roughly 5.5s end to end.
+   Every animation is transform/opacity only, so it stays smooth
+   on the phones this is mostly opened on.
+   ============================================================ */
+
+.splash-stage {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  display: grid;
+  place-items: center;
+  margin-bottom: var(--s-3);
+}
+
+.scan-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* ---- 1. face outline draws itself in ---- */
+.face-oval {
+  fill: none;
+  stroke: rgba(96, 165, 250, 0.5);
+  stroke-width: 1.2;
+  stroke-dasharray: 400;
+  stroke-dashoffset: 400;
+  animation: draw-oval 1.4s var(--ease, cubic-bezier(.4,0,.2,1)) .3s forwards;
+}
+@keyframes draw-oval { to { stroke-dashoffset: 0; } }
+
+/* ---- 2. landmark mesh ---- */
+.mesh line {
+  stroke: rgba(59, 130, 246, 0.45);
+  stroke-width: 0.9;
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: draw-mesh 1.1s ease-out 1.25s forwards;
+}
+@keyframes draw-mesh { to { stroke-dashoffset: 0; } }
+
+.marks circle {
+  fill: #60A5FA;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pop-mark .5s cubic-bezier(.34,1.56,.64,1) forwards;
+  animation-delay: calc(1.15s + var(--i) * .13s);
+  filter: drop-shadow(0 0 6px rgba(96, 165, 250, .9));
+}
+@keyframes pop-mark {
+  0%   { opacity: 0; transform: scale(0); }
+  70%  { opacity: 1; transform: scale(1.5); }
+  100% { opacity: .95; transform: scale(1); }
+}
+
+/* ---- 3. the crop closing in ---- */
+.crop-box path {
+  stroke: rgba(96, 165, 250, 0.85);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  fill: none;
+  opacity: 0;
+  animation: crop-in 1s cubic-bezier(.4,0,.2,1) 2.1s forwards;
+}
+@keyframes crop-in {
+  0%   { opacity: 0; transform: scale(1.18); }
+  60%  { opacity: 1; }
+  100% { opacity: .9; transform: scale(1); }
+}
+.crop-box { transform-box: fill-box; transform-origin: center; }
+
+/* ---- 4. the 6x6 occlusion grid, cell by cell ---- */
+.occl rect {
+  fill: rgba(59, 130, 246, 0.5);
+  opacity: 0;
+  animation: occl-flash .85s ease-out forwards;
+  animation-delay: calc(2.75s + var(--d) * .028s);
+}
+@keyframes occl-flash {
+  0%   { opacity: 0; }
+  35%  { opacity: .85; }
+  100% { opacity: .1; }
+}
+
+/* ---- detection sweep, twice ---- */
+.scanline {
+  opacity: 0;
+  animation: sweep 1.5s cubic-bezier(.4,0,.2,1) .9s 2 forwards;
+  filter: drop-shadow(0 0 10px rgba(96, 165, 250, .8));
+}
+@keyframes sweep {
+  0%   { transform: translateY(24px); opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { transform: translateY(178px); opacity: 0; }
+}
+
+/* ---- the logo sits above the scan, breathing ---- */
+.splash-stage .splash-logo {
+  position: relative;
+  z-index: 2;
+  animation: logo-breathe 3.2s ease-in-out 1.6s infinite;
+}
+@keyframes logo-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.035); }
+}
+
+/* ---- ambient motes ---- */
+.splash-field {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+.splash-field span {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(96, 165, 250, 0.5);
+  animation: drift linear infinite;
+}
+.splash-field span:nth-child(1) { left: 12%; animation-duration: 15s; animation-delay: 0s; }
+.splash-field span:nth-child(2) { left: 26%; animation-duration: 19s; animation-delay: -4s; }
+.splash-field span:nth-child(3) { left: 41%; animation-duration: 13s; animation-delay: -8s; }
+.splash-field span:nth-child(4) { left: 57%; animation-duration: 21s; animation-delay: -2s; }
+.splash-field span:nth-child(5) { left: 68%; animation-duration: 16s; animation-delay: -11s; }
+.splash-field span:nth-child(6) { left: 79%; animation-duration: 18s; animation-delay: -6s; }
+.splash-field span:nth-child(7) { left: 88%; animation-duration: 14s; animation-delay: -9s; }
+.splash-field span:nth-child(8) { left: 95%; animation-duration: 22s; animation-delay: -13s; }
+@keyframes drift {
+  0%   { transform: translateY(105vh) scale(.6); opacity: 0; }
+  10%  { opacity: .7; }
+  90%  { opacity: .7; }
+  100% { transform: translateY(-10vh) scale(1.1); opacity: 0; }
+}
+
+/* keep content above the motes */
+.splash-name, .splash-sub, .splash-progress, .splash-foot, .splash-stage {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- boot log lines slide in rather than blink ---- */
+.boot-line {
+  transform: translateX(-6px);
+  transition: opacity var(--t-med, .25s) var(--ease, ease),
+              transform var(--t-med, .25s) var(--ease, ease);
+}
+.boot-line.show { transform: translateX(0); }
+
+/* ---- small screens: the stage shrinks, nothing overflows ---- */
+@media (max-width: 480px) {
+  .splash-stage { width: 220px; height: 220px; }
+}
+
+/* ---- reduced motion: state without theatre ---- */
+@media (prefers-reduced-motion: reduce) {
+  .face-oval, .mesh line, .marks circle, .crop-box path,
+  .occl rect, .scanline, .splash-stage .splash-logo,
+  .splash-field span {
+    animation: none !important;
+  }
+  .face-oval { stroke-dashoffset: 0; }
+  .mesh line { stroke-dashoffset: 0; }
+  .marks circle, .crop-box path { opacity: .9; }
+  .occl rect { opacity: .12; }
+  .scanline, .splash-field { display: none; }
+}
+
+/* The app's own motion preference, same treatment */
+html[data-reduced-motion="true"] .face-oval,
+html[data-reduced-motion="true"] .mesh line,
+html[data-reduced-motion="true"] .marks circle,
+html[data-reduced-motion="true"] .crop-box path,
+html[data-reduced-motion="true"] .occl rect,
+html[data-reduced-motion="true"] .splash-stage .splash-logo,
+html[data-reduced-motion="true"] .splash-field span { animation: none !important; }
+html[data-reduced-motion="true"] .face-oval,
+html[data-reduced-motion="true"] .mesh line { stroke-dashoffset: 0; }
+html[data-reduced-motion="true"] .scanline,
+html[data-reduced-motion="true"] .splash-field { display: none; }
+
+/* ---- Readout columns ---- */
+.boot-key {
+  color: var(--text-2);
+  opacity: .75;
+}
+.boot-val {
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.boot-line.done .boot-val { color: var(--text); }
+
+/* Small screens: shrink everything that can shrink, before anything
+   overflows. The stage is the biggest thing on the page. */
+@media (max-width: 480px) {
+  .splash-stage { width: 200px; height: 200px; margin-bottom: var(--s-2); }
+  .splash-logo  { width: 92px; height: 92px; }
+  .splash-mark svg { width: 58px; height: 58px; }
+  .splash-name  { font-size: clamp(28px, 8vw, 34px); }
+  .boot-log     { font-size: 10.5px; min-height: 70px; }
+  .boot-line    { grid-template-columns: 12px 54px 1fr; gap: 6px; }
+}
+
+/* Very short viewports (a phone in landscape): drop the scan stage
+   entirely rather than squeezing it into nothing. */
+@media (max-height: 560px) {
+  .splash-stage { width: 150px; height: 150px; }
+  .scan-svg     { opacity: .5; }
 }

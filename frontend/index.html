@@ -22,27 +22,87 @@
 
   <main class="splash" aria-label="DeepShield AI is starting">
 
-    <!-- Logo tile + scan ring + pulse rings -->
-    <div class="splash-logo fade-up">
-      <span class="scan-ring" aria-hidden="true"></span>
-      <span class="pulse-ring" aria-hidden="true"></span>
-      <span class="pulse-ring ring-2" aria-hidden="true"></span>
-      <span class="splash-mark" aria-hidden="true">
-        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M16 5.5l8 3v7c0 5.2-3.4 9.3-8 11-4.6-1.7-8-5.8-8-11v-7l8-3z"
-                stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"
-                fill="rgba(59,130,246,0.14)"/>
-          <path d="M11.5 16h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-          <circle cx="16" cy="16" r="1.6" fill="currentColor"/>
-        </svg>
-      </span>
+    <!-- Ambient field: slow-drifting motes behind everything -->
+    <div class="splash-field" aria-hidden="true">
+      <span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span>
     </div>
 
-    <!-- Wordmark -->
+    <!-- The scan stage.
+         This is not decoration for its own sake: it animates the pipeline the
+         app actually runs - detect a face, place the five YuNet landmarks,
+         close a 224 crop around it, then sweep the 6x6 occlusion grid that
+         produces the explanation. -->
+    <div class="splash-stage" aria-hidden="true">
+      <svg class="scan-svg" viewBox="0 0 200 200" fill="none"
+           xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="scanGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%"   stop-color="#3B82F6" stop-opacity="0"/>
+            <stop offset="50%"  stop-color="#60A5FA" stop-opacity="0.95"/>
+            <stop offset="100%" stop-color="#3B82F6" stop-opacity="0"/>
+          </linearGradient>
+          <clipPath id="faceClip">
+            <ellipse cx="100" cy="102" rx="54" ry="68"/>
+          </clipPath>
+        </defs>
+
+        <!-- face outline, drawn in -->
+        <ellipse class="face-oval" cx="100" cy="102" rx="54" ry="68"/>
+
+        <!-- landmark mesh: the five points YuNet actually returns -->
+        <g class="mesh">
+          <line x1="78" y1="88" x2="100" y2="112"/>
+          <line x1="122" y1="88" x2="100" y2="112"/>
+          <line x1="100" y1="112" x2="84" y2="136"/>
+          <line x1="100" y1="112" x2="116" y2="136"/>
+          <line x1="84" y1="136" x2="116" y2="136"/>
+          <line x1="78" y1="88" x2="122" y2="88"/>
+        </g>
+        <g class="marks">
+          <circle cx="78"  cy="88"  r="3.4" style="--i:0"/>
+          <circle cx="122" cy="88"  r="3.4" style="--i:1"/>
+          <circle cx="100" cy="112" r="3.4" style="--i:2"/>
+          <circle cx="84"  cy="136" r="3.4" style="--i:3"/>
+          <circle cx="116" cy="136" r="3.4" style="--i:4"/>
+        </g>
+
+        <!-- the 0.35-margin crop closing in -->
+        <g class="crop-box">
+          <path d="M34 40 h20 M34 40 v20"/>
+          <path d="M166 40 h-20 M166 40 v20"/>
+          <path d="M34 164 h20 M34 164 v-20"/>
+          <path d="M166 164 h-20 M166 164 v-20"/>
+        </g>
+
+        <!-- 6x6 occlusion grid, the real one, cascading -->
+        <g class="occl" clip-path="url(#faceClip)"></g>
+
+        <!-- detection sweep -->
+        <rect class="scanline" x="20" y="0" width="160" height="2.5"
+              fill="url(#scanGrad)"/>
+      </svg>
+
+      <!-- Logo tile sits inside the stage, centred -->
+      <div class="splash-logo">
+        <span class="scan-ring"></span>
+        <span class="pulse-ring"></span>
+        <span class="pulse-ring ring-2"></span>
+        <span class="splash-mark">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 5.5l8 3v7c0 5.2-3.4 9.3-8 11-4.6-1.7-8-5.8-8-11v-7l8-3z"
+                  stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"
+                  fill="rgba(59,130,246,0.14)"/>
+            <path d="M11.5 16h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="16" cy="16" r="1.6" fill="currentColor"/>
+          </svg>
+        </span>
+      </div>
+    </div>
+
     <h1 class="splash-name fade-up" data-delay="1">DeepShield</h1>
     <p class="splash-sub text-2 fade-up" data-delay="1">AI-Powered Deepfake Detection</p>
 
-    <!-- Boot progress: real bar + percentage + engine log -->
     <div class="splash-progress fade-up" data-delay="2" role="status" aria-label="Loading">
       <div class="boot-row">
         <div class="progress"><div class="progress-bar" id="boot-bar"></div></div>
@@ -51,9 +111,9 @@
       <div class="boot-log mono" id="boot-log" aria-hidden="true"></div>
     </div>
 
-    <!-- Version footer -->
     <footer class="splash-foot fade-up" data-delay="3">
-      <span class="badge"><i data-lucide="cpu" class="icon-sm"></i> CPU-optimized · MobileNetV3</span>
+      <span class="badge"><i data-lucide="cpu" class="icon-sm"></i>
+        CPU-optimized · <span data-model-name>&mdash;</span></span>
       <span class="mono text-xs text-3">v1.0.0</span>
     </footer>
 
