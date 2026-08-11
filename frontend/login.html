@@ -48,6 +48,16 @@
         </div>
 
         <form id="login-form" novalidate>
+          <div class="field" id="field-name">
+            <label class="field-label" for="name">Your name <span class="text-3">(optional)</span></label>
+            <div class="input-group">
+              <i data-lucide="user" class="icon"></i>
+              <input class="input" type="text" id="name" name="name"
+                     placeholder="What should we call you?" autocomplete="name"
+                     maxlength="40">
+            </div>
+          </div>
+
           <div class="field" id="field-email">
             <label class="field-label" for="email">Email</label>
             <div class="input-group">

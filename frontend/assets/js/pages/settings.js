@@ -95,3 +95,28 @@ document.addEventListener('DOMContentLoaded', () => {
     if (h) DS.server.paintBadge(badge, h.engine === 'live' ? 'live' : 'simulated');
   });
 });
+
+/* ---- Display name ----
+   The dashboard greeting used to be derived from the email address, which
+   turned kumudranjan6127@gmail.com into "Kumudranjan6127". An address is a
+   routing detail, not an introduction — so it is asked for at sign-in and
+   editable here. Empty is allowed and the greeting handles it. */
+document.addEventListener('DOMContentLoaded', () => {
+  const field = document.getElementById('display-name');
+  if (!field) return;
+
+  const user = DS.auth.user();
+  if (!user) return;
+  field.value = user.name || '';
+
+  const save = () => {
+    const name = field.value.trim().slice(0, 40);
+    if (name === (user.name || '')) return;
+    DS.auth.login(name, user.email);
+    DS.toast(name ? `You will be greeted as ${name}.`
+                  : 'Greeting will no longer use a name.', 'success');
+  };
+
+  field.addEventListener('blur', save);
+  field.addEventListener('keydown', e => { if (e.key === 'Enter') field.blur(); });
+});

@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
     /* DEMO mode — brief spinner, then local sign-in */
     if (!firebaseReady) {
       setBusy(true, 'Signing in…');
-      setTimeout(() => enter(displayNameFrom(email), email), 700);
+      setTimeout(() => enter(chosenName(), email), 700);
       return;
     }
 
@@ -144,11 +144,11 @@ document.addEventListener('DOMContentLoaded', () => {
       let cred;
       if (mode === 'signup') {
         cred = await fbAuth.createUserWithEmailAndPassword(email, pass);
-        await cred.user.updateProfile({ displayName: displayNameFrom(email) });
+        if (chosenName()) await cred.user.updateProfile({ displayName: chosenName() });
       } else {
         cred = await fbAuth.signInWithEmailAndPassword(email, pass);
       }
-      enter(cred.user.displayName || displayNameFrom(email), email);
+      enter(chosenName() || cred.user.displayName || '', email);
     } catch (err) {
       setBusy(false);
       DS.toast(friendlyError(err), 'error');
@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const provider = new firebase.auth.GoogleAuthProvider();
       const cred = await fbAuth.signInWithPopup(provider);
-      enter(cred.user.displayName || displayNameFrom(cred.user.email || 'user@x.co'),
+      enter(cred.user.displayName || '',
             cred.user.email || '');
     } catch (err) {
       setBusy(false);
@@ -196,11 +196,15 @@ function friendlyError(err) {
   return (err && map[err.code]) || 'Sign-in failed. Please try again.';
 }
 
-/* "harsh.goswami" → "Harsh Goswami" (split on . _ -, capitalize each) */
-function displayNameFrom(email) {
-  return email.split('@')[0]
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ') || 'User';
+/* The name the person typed, or nothing.
+
+   This used to derive a name from the email address - split on @, then on
+   . _ -, capitalise each piece. For `kumudranjan6127@gmail.com` that
+   produced "Kumudranjan6127", which is not anyone's name. An address is a
+   routing detail, not an introduction.
+
+   Empty is a valid answer. The greeting handles it. */
+function chosenName() {
+  const field = document.getElementById('name');
+  return field ? field.value.trim().slice(0, 40) : '';
 }

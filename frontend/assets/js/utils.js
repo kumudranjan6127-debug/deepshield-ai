@@ -78,9 +78,14 @@ DS.util = {
     return h >>> 0;
   },
 
+  /* "Kumud Ranjan" → "KR", and anything empty → "U".
+     Trim first: a name of only spaces is truthy, so the old version reached
+     `''[0].toUpperCase()` and threw. That was unreachable while the name was
+     derived from an email address; it is reachable now that people type it. */
   initials(name) {
-    return String(name || 'U').trim().split(/\s+/).slice(0, 2)
-      .map(w => w[0].toUpperCase()).join('');
+    const words = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return 'U';
+    return words.slice(0, 2).map(w => w[0].toUpperCase()).join('');
   },
 
   greeting() {

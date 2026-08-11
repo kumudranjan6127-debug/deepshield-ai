@@ -8,9 +8,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!user) return;
 
   /* ---- Greeting ---- */
+  /* No name is a normal state, not a gap to fill. "Good evening" on its
+     own reads fine; "Good evening, User" and "Good evening, " do not. */
   const greeting = document.getElementById('greeting');
-  const firstName = String(user.name || '').split(' ')[0];
-  greeting.textContent = `${DS.util.greeting()}, ${firstName}`;
+  const firstName = String(user.name || '').trim().split(/\s+/)[0];
+  greeting.textContent = firstName
+    ? `${DS.util.greeting()}, ${firstName}`
+    : DS.util.greeting();
 
   /* ---- Stats + recent scans ---- */
   const history = DS.history.all();
