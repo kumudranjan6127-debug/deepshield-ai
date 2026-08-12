@@ -40,3 +40,6 @@ Thumbs.db
 
 # ---- Server log (regenerated) ----
 backend.log
+# Real failing cases - someone else's photographs, never committed.
+testcases/*
+!testcases/README.md
