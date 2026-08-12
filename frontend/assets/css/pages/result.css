@@ -367,3 +367,20 @@
   .why-list li { grid-template-columns: 1fr; gap: 2px; }
   .verdict-why { padding: var(--s-2); }
 }
+
+/* ---- Scope of the verdict ----
+   Sits directly under the verdict note rather than in the insight column,
+   because it qualifies the number in the ring. Someone who reads only the
+   big number and leaves is exactly the person this is for. */
+.scope-note {
+  max-width: 420px;
+  margin-top: var(--s-4);
+  padding: var(--s-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning, #d97706);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  text-align: left;
+}
+.scope-note .badge { margin-bottom: var(--s-2); }
+.scope-note p { margin: 0; line-height: 1.5; }

@@ -129,13 +129,47 @@ process outright (no exception, no traceback). Batches of 4, 8, 12 and 16 were
 fine. `_forward()` now chunks at 8, which is a working guard rather than a
 diagnosis — the underlying limit in OpenCV 5.0.0.93 is unknown.
 
-## 🟡 8. Face detection failure is silent
+## ✅ 8. Face detection failure is silent — FIXED
 
-When YuNet finds no face, the whole frame is analysed and the verdict is
-returned as if a face had been found. The user is never told. For non-face
-images this produces confident, meaningless output.
+When YuNet found no face, the whole frame was analysed and the verdict came
+back as if a face had been found. The user was never told, so a landscape or
+a screenshot produced confident, meaningless output that looked exactly like
+a real verdict.
 
-**Fix:** return a `faceFound: false` flag and have the result page say so.
+`analyze_file` now returns `faceFound`, the result page carries a "No face
+detected" note beside the verdict, and the downloadable report says it in
+prose — a report is what gets forwarded to someone else, so the caveat has
+to travel with it. Scoring the whole frame is kept as the fallback; the
+alternative is refusing landscapes outright, and the honest fix was saying
+so rather than hiding it.
+
+## ✅ 8b. Only the largest face in an image was scored — FIXED
+
+Found while investigating a face-swap photograph the app called real.
+
+`_detect_face` picked the largest detection and the image path scored that
+one alone. Every other face was discarded without a word. **A group photo
+with one swapped face was therefore decided by whichever head happened to be
+a few pixels wider** — which is the commonest real deepfake there is, and a
+coin flip in a two-person picture.
+
+`_detect_faces` now returns every face (largest first, capped by
+`DS_MAX_FACES`, default 6) and the verdict comes from the most suspicious of
+them. The max is the only defensible reduction: a photograph containing a
+manipulated face is a manipulated photograph, and averaging would let a
+crowd outvote the swap, which is exactly the attack. `facesFound` is
+reported so the result page can say "4 faces detected" instead of implying
+the whole picture was cleared.
+
+Cost is one forward pass per extra face — **29 ms measured locally**, so
+about 0.3 s each on the Render free instance.
+
+`tests/test_multiface.py` pins the selection rule with a stubbed classifier.
+**A composite image is not a valid probe here**: pasting two faces onto a
+canvas changes their resolution and their background, and both move the
+score further than the manipulation does. I built one anyway and it produced
+a confident wrong story in both directions before I checked the per-face
+numbers — see `docs/LIMITATIONS.md`.
 
 ## 🟡 9. Verifier reliability is calibrated on very little data
 

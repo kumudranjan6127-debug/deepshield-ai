@@ -410,9 +410,23 @@ class _Engine:
         return found["crop"], found["landmarks"]
 
     def _detect_face(self, pil_image):
-        """One detection pass, everything it produced.
+        """The largest face, as everything before multi-face support saw it.
 
-        → {crop, landmarks, box, origin, frame, found}
+        The video path and the temporal signals are written around one face
+        per frame, so they keep this."""
+        found = self._detect_faces(pil_image, limit=1)
+        return found[0]
+
+    def _detect_faces(self, pil_image, limit=None):
+        """Every face, largest first. Always at least one entry.
+
+        → [{crop, landmarks, box, origin, frame, found}, ...]
+
+        This used to return only the largest, which is wrong for the single
+        most common real deepfake: a group photograph with one swapped face.
+        A real portrait beside a swapped one outvoted it by being a few
+        pixels wider, and the app answered "real 97%" with a fake face
+        plainly in the frame.
 
         `box` is (x, y, w, h) of the face and `origin` the crop's top-left
         corner, both in the capped frame's coordinates. The video path
@@ -427,7 +441,7 @@ class _Engine:
                 "origin": (0, 0), "frame": pil_image.size, "found": False}
 
         if not os.path.exists(YUNET_PATH):
-            return miss  # detector missing → analyze full frame
+            return [miss]  # detector missing → analyze full frame
 
         if self._detector is None:
             self._detector = cv2.FaceDetectorYN_create(
@@ -455,32 +469,40 @@ class _Engine:
         self._detector.setInputSize((bgr.shape[1], bgr.shape[0]))
         _, faces = self._detector.detect(bgr)
         if faces is None or len(faces) == 0:
-            return {**miss, "frame": (w, h)}  # no face → analyze the full frame
+            return [{**miss, "frame": (w, h)}]  # no face → whole frame
 
-        # Largest detected face = the main subject
-        best = faces[int(np.argmax(faces[:, 2] * faces[:, 3]))]
-        x, y, fw, fh = [v / scale for v in best[:4]]
-
-        m = 0.35 * max(fw, fh)  # margin, matches portrait-style crops
-        x0 = max(0, int(x - m));  y0 = max(0, int(y - m))
-        x1 = min(w, int(x + fw + m));  y1 = min(h, int(y + fh + m))
-        if x1 <= x0 or y1 <= y0:
-            return {**miss, "frame": (w, h)}
-
-        # YuNet landmarks (5 points) → crop coordinates, for the
-        # explainability "focus region" text
+        # Largest first: the main subject still leads, and the cap below
+        # drops the smallest faces rather than the ones anyone is looking at.
+        order = np.argsort(-(faces[:, 2] * faces[:, 3]))
+        cap = CFG.MAX_FACES if limit is None else limit
         names = ["right_eye", "left_eye", "nose", "mouth_right", "mouth_left"]
-        landmarks = {}
-        for i, name in enumerate(names):
-            lx = best[4 + i * 2] / scale - x0
-            ly = best[5 + i * 2] / scale - y0
-            landmarks[name] = (float(lx), float(ly))
 
-        return {"crop": Image.fromarray(rgb[y0:y1, x0:x1]),
-                "landmarks": landmarks,
-                "box": (float(x), float(y), float(fw), float(fh)),
-                "origin": (int(x0), int(y0)),
-                "frame": (w, h), "found": True}
+        out = []
+        for index in order[:max(1, cap)]:
+            best = faces[int(index)]
+            x, y, fw, fh = [v / scale for v in best[:4]]
+
+            m = 0.35 * max(fw, fh)  # margin, matches portrait-style crops
+            x0 = max(0, int(x - m));  y0 = max(0, int(y - m))
+            x1 = min(w, int(x + fw + m));  y1 = min(h, int(y + fh + m))
+            if x1 <= x0 or y1 <= y0:
+                continue
+
+            # YuNet landmarks (5 points) → crop coordinates, for the
+            # explainability "focus region" text
+            landmarks = {}
+            for i, name in enumerate(names):
+                lx = best[4 + i * 2] / scale - x0
+                ly = best[5 + i * 2] / scale - y0
+                landmarks[name] = (float(lx), float(ly))
+
+            out.append({"crop": Image.fromarray(rgb[y0:y1, x0:x1]),
+                        "landmarks": landmarks,
+                        "box": (float(x), float(y), float(fw), float(fh)),
+                        "origin": (int(x0), int(y0)),
+                        "frame": (w, h), "found": True})
+
+        return out or [{**miss, "frame": (w, h)}]
 
     # ---- probability vector over classes (input already face-cropped)
     # TTA: averages the prediction over the image + its mirror — a small
@@ -809,6 +831,10 @@ def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
             "prediction": prediction,
             "confidence": confidence,
             "framesAnalyzed": len(records),
+            # True when any sampled frame carried a face. `video.temporal`
+            # has the per-frame counts; this is the one bit the result page
+            # needs to decide whether to warn.
+            "faceFound": any(r.get("box") for r in records),
             "video": {
                 "framesAnalyzed": len(records),
                 "suspiciousFrames": agg["suspicious"],
@@ -843,9 +869,22 @@ def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
     # Image: ensemble — our model + every available HF verifier vote P(fake)
     from PIL import Image
     with Image.open(path) as im:
-        face, landmarks = eng._face_crop_ex(im)
-        probs = eng._probs_raw(face)
+        # Every face, not the largest one. `_face_crop_ex` also threw away
+        # whether a face was found at all, which the caller has to be told:
+        # analysing a whole frame is a reasonable fallback, presenting the
+        # result as though a face were in it is not.
+        detected = eng._detect_faces(im)
         fake_i = eng.classes.index("fake")
+
+        # One image, one verdict — so the faces have to be reduced to one
+        # score, and the max is the only defensible choice. A photograph
+        # containing a manipulated face is a manipulated photograph, whatever
+        # the other people in it look like. Averaging would let a crowd
+        # outvote the swap, which is exactly the attack.
+        scored = [(eng._probs_raw(d["crop"]), d) for d in detected]
+        probs, found = max(scored, key=lambda pair: float(pair[0][fake_i]))
+
+        face, landmarks = found["crop"], found["landmarks"]
         votes = [{"model": "MobileNetV3 (ours)", "pFake": round(float(probs[fake_i]), 4)}]
 
         for hf in _get_hf_engines():
@@ -893,6 +932,15 @@ def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
         "prediction": prediction,
         "confidence": confidence,
         "framesAnalyzed": 1,
+        # False means no face was found and the whole frame was scored. The
+        # model was trained on faces only, so a verdict on a landscape or a
+        # screenshot is confident and meaningless - and until now it looked
+        # exactly like a verdict on a face.
+        "faceFound": bool(found["found"]),
+        # How many were found, and where in that ranking the reported verdict
+        # came from. On a group photo the result page has to be able to say
+        # "one of four faces" rather than implying the whole picture.
+        "facesFound": len([d for d in detected if d["found"]]),
         "ensemble": votes,
         "disputed": disputed,
         "combiner": "own-led + verifier consensus",

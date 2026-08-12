@@ -479,7 +479,9 @@ def analyze():
             # video scans only; the others for images only. Keys the engine
             # did not emit are dropped rather than sent as null.
             extras = {k: result[k] for k in
-                      ("ensemble", "disputed", "explain", "video") if k in result}
+                      ("ensemble", "disputed", "explain", "video",
+                       "faceFound", "facesFound")
+                      if k in result}
         else:
             # No model, or a metadata-only request: the labelled demo engine
             prediction, confidence, frames = echo_verdict(file_name, file_size, file_type)

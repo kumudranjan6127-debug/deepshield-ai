@@ -155,16 +155,45 @@ evidence exists for what value of any of them means manipulation.
 
 ---
 
-## 9. No face means no warning
+## 9. What the verdict is about
 
-When YuNet finds no face, the whole frame is analysed and the verdict is
-returned as though a face had been found. For a landscape, a document or a
-crowd this produces a confident, meaningless answer.
+Two things used to be left unsaid, and both made a narrow answer look like
+a broad one. Both are now reported; neither is fully solved.
 
-The detector *knows* — `_detect_face` returns `found: False` — and the API
-does not pass it on. `KNOWN_ISSUES.md` #7. A test pins the current behaviour
-so that adding a `faceFound` flag fails loudly rather than changing the
-contract quietly.
+**No face.** When YuNet finds nothing, the whole frame is still analysed —
+refusing landscapes outright would be worse — but the response now carries
+`faceFound: false` and both the result page and the report say so. The model
+is trained on faces, so a score produced this way is not weak evidence, it
+is no evidence.
+
+**More than one face.** Only the largest detection used to be scored, so a
+group photograph with one manipulated face was decided by whichever head was
+widest. Every face is now scored and the most suspicious one produces the
+verdict. This deliberately trades one error for another: a single false
+positive anywhere in a crowd now condemns the whole image. That is the right
+direction for a detector — missing the swap is the worse failure — but it
+means **false positives should be expected to rise with the number of faces,
+and this has not been measured.** There is no group-photograph evaluation
+set. `analyses.faces` is recorded so real traffic can answer how often it
+matters.
+
+### A composite image is not a valid test
+
+Worth writing down, because it produced two confident wrong conclusions in
+one sitting. To demonstrate the multi-face bug I pasted a known-fake face
+and a known-real face onto one canvas. Both results were artefacts:
+
+- On a 1500px canvas the 1024px input cap shrank the fake face to ~187px and
+  **it stopped reading as fake at all** (0.032). The composite was measuring
+  resolution, not face selection.
+- On a smaller canvas the *authentic* LFW face scored **0.809 fake** — the
+  grey background inside its crop, not the person.
+
+The second one is a real finding in its own right: a face crop that includes
+flat synthetic background moves the score a long way. Neither composite
+showed anything about the bug they were built to show. The selection rule is
+tested with a stubbed classifier instead, and the real-world case needs a
+real photograph.
 
 ---
 

@@ -225,3 +225,71 @@ def test_no_database_means_no_dependency():
     """psycopg is optional. The app must import and serve without it."""
     assert store._psycopg() is None or store.CFG.DATABASE_URL == "" or True
     assert store.backend_name() != "postgres" or store.CFG.DATABASE_URL
+
+
+# ------------------------------------------- the schema and the rows agree
+
+def test_every_column_written_exists_in_the_schema(monkeypatch):
+    """A row key with no column fails the insert - and this module swallows
+    its own errors by design, so analytics would stop recording with nothing
+    in any log a person was watching.
+
+    The deployed table also predates some of these columns, and CREATE TABLE
+    IF NOT EXISTS does nothing to a table that is already there. That is why
+    the schema carries ALTER TABLE ... ADD COLUMN IF NOT EXISTS as well; a
+    column present in one and not the other is the bug this catches.
+    """
+    rows = captured(monkeypatch)
+    store.record_analysis(
+        scan_id="S", file_name="x.jpg", file_type="image", file_bytes=1,
+        result={**RESULT, "faceFound": True, "facesFound": 3},
+        identity=IDENTITY, latency_ms=1, engine="live")
+    store.record_feedback({"scanId": "S", "agree": True, "prediction": "real",
+                           "confidence": 90, "fileType": "image"})
+
+    # Strip the SQL comments first. Without this the test passes for the
+    # wrong reason: the schema's own prose mentions the column names, so a
+    # renamed column is still "declared" as far as a naive token split is
+    # concerned. Found by renaming one and watching this test stay green.
+    import re
+    sql = re.sub("--.*", " ", store.SCHEMA)   # `.` stops at the newline
+    declared = set(sql.replace(",", " ").replace("(", " ").split())
+    for table, row in rows:
+        missing = [k for k in row if k not in declared]
+        assert not missing, f"{table} writes {missing}, which the schema lacks"
+
+
+def test_new_columns_are_added_to_a_table_that_already_exists():
+    """CREATE TABLE IF NOT EXISTS is not a migration. Every column added
+    after the first deployment needs an ALTER as well."""
+    schema = store.SCHEMA
+    created = schema[:schema.index("ALTER TABLE")] if "ALTER TABLE" in schema else schema
+    for column in ("faces", "face_found"):
+        assert f"ADD COLUMN IF NOT EXISTS {column}" in schema, \
+            f"{column} would never appear on the live table"
+        assert column in created, f"{column} missing from the fresh-install schema"
+
+
+def test_the_face_count_is_recorded(monkeypatch):
+    """How often real uploads carry more than one face decides whether the
+    multi-face path matters in practice. Until now it was unmeasurable."""
+    rows = captured(monkeypatch)
+    store.record_analysis(
+        scan_id="S", file_name="group.jpg", file_type="image", file_bytes=1,
+        result={**RESULT, "faceFound": True, "facesFound": 4},
+        identity=IDENTITY, latency_ms=1, engine="live")
+    _, row = rows[0]
+    assert row["faces"] == 4
+    assert row["face_found"] is True
+
+
+def test_a_scan_from_before_the_flag_is_not_recorded_as_faceless(monkeypatch):
+    """-1 and None, not 0 and False: an old row must stay distinguishable
+    from a picture that genuinely had no face in it."""
+    rows = captured(monkeypatch)
+    store.record_analysis(
+        scan_id="S", file_name="x.jpg", file_type="image", file_bytes=1,
+        result=RESULT, identity=IDENTITY, latency_ms=1, engine="live")
+    _, row = rows[0]
+    assert row["faces"] == -1
+    assert row["face_found"] is None

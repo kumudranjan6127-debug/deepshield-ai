@@ -80,8 +80,54 @@ function renderInsights(scan) {
     note.hidden = false;
   }
   if (scan.disputed) document.getElementById('disputed-chip').hidden = false;
+  renderScope(scan);
 
   DS.icons();
+}
+
+
+/* ---- What the verdict is about ----
+   Two things the result page used to leave unsaid, both of which make a
+   narrow answer look like a broad one.
+
+   No face at all: the model was trained on faces, so scoring a landscape
+   or a screenshot produces a confident number that means nothing. The
+   fallback is reasonable; showing it as though a face were in the frame is
+   not.
+
+   Several faces: the verdict comes from the single most suspicious one,
+   which is the right rule - a photograph containing a manipulated face is
+   a manipulated photograph - but "real" then means "the most suspicious of
+   four faces looked real", and the reader deserves to know which claim is
+   being made.
+
+   Scans predating this say nothing rather than guessing, so an old result
+   opened from history looks exactly as it did. */
+function renderScope(scan) {
+  if (scan.faceFound === undefined) return;
+
+  const box = document.getElementById('scope-note');
+  const title = document.getElementById('scope-title');
+  const body = document.getElementById('scope-body');
+  const faces = Number(scan.facesFound || 0);
+
+  if (scan.faceFound === false) {
+    title.textContent = 'No face detected';
+    body.textContent =
+      'The whole image was analysed instead. This model was trained only on ' +
+      'faces, so the score above is not evidence about this picture - treat ' +
+      'it as no answer rather than a weak one.';
+  } else if (faces > 1) {
+    title.textContent = `${faces} faces detected`;
+    body.textContent =
+      `Every face was analysed and the verdict comes from the most ` +
+      `suspicious one, so a single manipulated face decides the result. ` +
+      `The heatmap below shows that face, not the other ${faces - 1}.`;
+  } else {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
 }
 
 /* ---- Video analysis ----

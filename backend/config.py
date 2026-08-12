@@ -87,6 +87,12 @@ class Config:
 
     # ---- Inference tuning ----
     MAX_IMAGE_SIDE = _int("DS_MAX_IMAGE_SIDE", 1024)   # oversized inputs are unlike training data
+
+    # How many faces in one image get scored. A group photograph with one
+    # swapped face is the commonest real deepfake there is, and scoring only
+    # the largest face misses it entirely. Each extra face is one forward
+    # pass (~30 ms), so the cap is about a pathological crowd shot, not cost.
+    MAX_FACES = _int("DS_MAX_FACES", 6)
     JPEG_NORMALISE_QUALITY = _int("DS_JPEG_QUALITY", 88)
     OCCLUSION_GRID = _int("DS_OCCLUSION_GRID", 6)
     MAX_FORWARD_BATCH = _int("DS_MAX_BATCH", 8)        # OpenCV's DNN engine dies on large batches

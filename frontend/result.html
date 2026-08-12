@@ -177,6 +177,19 @@
               <span class="badge" id="risk-chip"><!-- filled by result.js --></span>
               <span class="badge" id="certainty-chip" hidden><!-- filled by result.js --></span>
               <p class="text-2 text-sm verdict-note" id="verdict-note"></p>
+
+              <!-- What the verdict is actually about. Two things used to be
+                   left unsaid: that no face was found and the whole frame was
+                   scored anyway, and that only one face out of several was
+                   the subject. Both made a narrow answer look like a broad
+                   one. Filled by result.js; hidden when neither applies. -->
+              <div class="scope-note" id="scope-note" hidden>
+                <span class="badge badge-warning">
+                  <i data-lucide="scan-face" class="icon-sm"></i>
+                  <span id="scope-title"></span>
+                </span>
+                <p class="text-xs text-3" id="scope-body"></p>
+              </div>
               <p class="text-xs text-3" id="verdict-caveat">A detection confidence score, not a probability that the media is fake &mdash; this model has not been calibrated.</p>
 
               <!-- What produced this verdict. The engine badge is per-scan,

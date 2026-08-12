@@ -150,6 +150,31 @@ function renderReport(scan) {
   set('summary-text', buildSummary(scan));
 }
 
+/* ---- What the verdict is about ----
+   A report is the artefact someone forwards to a third party, so anything
+   qualifying the verdict has to travel with it. "No significant
+   manipulation artifacts were detected" is simply false about a picture
+   with no face in it, and incomplete about a group photograph where one
+   face out of four decided the answer.
+
+   Empty for scans that predate the flag, so old reports read as before. */
+function scopeSentence(scan) {
+  if (scan.faceFound === undefined) return '';
+  if (scan.faceFound === false) {
+    return ' No face was detected, so the whole frame was analysed. This '
+      + 'model is trained on faces, and a score produced this way is not '
+      + 'evidence about the media - it should be read as no result.';
+  }
+  const faces = Number(scan.facesFound || 0);
+  if (faces > 1) {
+    return ` ${faces} faces were detected; each was analysed and the verdict `
+      + 'reports the most suspicious of them, so one manipulated face '
+      + 'determines the result for the whole image.';
+  }
+  return '';
+}
+
+
 /* ---- Summary paragraph, templated per verdict ---- */
 function buildSummary(scan) {
   const frames = scan.framesAnalyzed || 1;
@@ -161,12 +186,14 @@ function buildSummary(scan) {
     return `The submitted ${media} was classified as a likely deepfake with ${scan.confidence}% model `
       + `confidence, based on analysis of ${frameTxt}. Detected patterns are consistent with `
       + `synthetically generated or manipulated facial content, placing this media at ${risk} risk. `
-      + `We recommend verifying the original source before this content is shared or relied upon.`;
+      + `We recommend verifying the original source before this content is shared or relied upon.`
+      + scopeSentence(scan);
   }
   return `The submitted ${media} was classified as likely authentic with ${scan.confidence}% model `
     + `confidence, based on analysis of ${frameTxt}. No significant manipulation artifacts were `
     + `detected, and the media is rated ${risk} risk. As with any automated screening, pairing this `
-    + `result with source verification is recommended for sensitive use cases.`;
+    + `result with source verification is recommended for sensitive use cases.`
+    + scopeSentence(scan);
 }
 
 /* ---- Download PDF = retitle document, open the print dialog ---- */

@@ -72,20 +72,24 @@ def test_no_face_is_reported_as_no_face(engine_ready, no_face_image):
     assert found["box"] is None
 
 
-def test_an_image_with_no_face_still_returns_a_verdict(engine_ready, no_face_image):
-    """Known gap (KNOWN_ISSUES #6): the whole frame is analysed and the
-    verdict comes back as though a face had been found. Pinned here so the
-    day someone adds a `faceFound` flag, this test fails and gets updated
-    rather than the behaviour changing unnoticed."""
+def test_an_image_with_no_face_says_so(engine_ready, no_face_image):
+    """This used to come back looking exactly like a verdict on a face.
+
+    Scoring the whole frame is a defensible fallback - the alternative is
+    refusing landscapes outright. Presenting the result without saying a
+    face was never found is not: the model was trained on faces, so the
+    number means nothing, and it was shown with the same confidence as a
+    number that does."""
     result = engine_ready.analyze_file(no_face_image, "image")
     assert result["prediction"] in ("real", "deepfake")
-    assert "faceFound" not in result, \
-        "a faceFound flag now exists — update this test and KNOWN_ISSUES #6"
+    assert result["faceFound"] is False
+    assert result["facesFound"] == 0
 
 
 def test_two_faces_produce_one_verdict(engine_ready, multi_face_image):
-    """The largest face is the subject. Whatever else is in frame, the API
-    contract is one verdict per image."""
+    """Still one verdict per image - but the most suspicious face produces
+    it now, not the widest one. `tests/test_multiface.py` pins the selection
+    rule; this holds the API contract steady."""
     result = engine_ready.analyze_file(multi_face_image, "image")
     assert result["prediction"] in ("real", "deepfake")
     assert result["framesAnalyzed"] == 1

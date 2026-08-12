@@ -100,6 +100,12 @@ CREATE TABLE IF NOT EXISTS analyses (
     runtime       TEXT,
     frames        INTEGER,
     suspicious    INTEGER,
+    -- How many faces were in the picture, and whether there were any at
+    -- all. Both were silently absent until a group photo with one swapped
+    -- face turned out to be decided by whichever head was widest; how
+    -- often real uploads have more than one face is now measurable rather
+    -- than assumed.
+    faces         INTEGER,
     face_found    BOOLEAN,
     latency_ms    INTEGER
 );
@@ -118,6 +124,15 @@ CREATE TABLE IF NOT EXISTS feedback (
 );
 CREATE INDEX IF NOT EXISTS feedback_scan_id ON feedback (scan_id);
 CREATE INDEX IF NOT EXISTS feedback_agree   ON feedback (agree);
+
+-- Columns added after a table already existed somewhere. CREATE TABLE IF
+-- NOT EXISTS silently does nothing to a live table, so without these every
+-- insert would fail on the missing column - and because this module
+-- swallows its own errors by design, analytics would simply stop recording
+-- with nothing in the logs anyone was watching. Additive only: no column is
+-- ever dropped or retyped here.
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS faces      INTEGER;
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS face_found BOOLEAN;
 """
 
 
@@ -204,7 +219,15 @@ def record_analysis(*, scan_id, file_name, file_type, file_bytes, result,
         "runtime": str(identity.get("runtime") or "")[:16],
         "frames": int(result.get("framesAnalyzed") or 0),
         "suspicious": int(video.get("suspiciousFrames") or 0),
-        "face_found": bool((result.get("explain") or {}).get("regions")) or None,
+        # -1 rather than 0 when the field is absent, so an old row and a
+        # picture with genuinely no face stay distinguishable.
+        "faces": int(result["facesFound"]) if "facesFound" in result else -1,
+        # Was a face found - asked of the detector rather than inferred from
+        # whether the explanation produced any regions, which is what this
+        # did before the engine reported it. Explain is best-effort and can
+        # fail for reasons that have nothing to do with faces, so that proxy
+        # recorded "no face" for images that plainly had one.
+        "face_found": bool(result["faceFound"]) if "faceFound" in result else None,
         "latency_ms": int(latency_ms or 0),
     }
 
