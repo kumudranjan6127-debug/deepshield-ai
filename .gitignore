@@ -29,6 +29,10 @@ datasets/
 eval_data/*
 !eval_data/README.md
 
+# ---- Objective V3 benchmark inputs and local outputs ----
+dataset/
+benchmark-results/
+
 # ---- Test media, rebuilt by tests/conftest.py on every run ----
 tests/fixtures/
 .pytest_cache/

@@ -24,11 +24,32 @@ From the repository root:
 python tools/benchmark_model.py --dataset dataset
 ```
 
-Results are written to `benchmark-results/predictions.csv` and `benchmark-results/report.json`.
+Results are written to:
+
+- `benchmark-results/predictions.csv` — one row per input, including label,
+  verdict, confidence, face detection result/count, latency, and any error.
+- `benchmark-results/report.json` — model identity, protocol, metrics, and
+  latency statistics for automated comparison.
+- `benchmark-results/summary.txt` — a concise human-readable report.
+
+The runner calls `inference.analyze_file(path, "image")`, the same public
+serving entry point used by the backend. It only supplies the path to load
+pixels; neither file names nor paths are passed to the detector or model.
+No-face inputs are retained in the per-file output and counted as
+inconclusive; they are excluded from classification metrics because the
+face-trained model explicitly reports insufficient evidence for them.
+
+`dataset/` and `benchmark-results/` are ignored by Git. Keep the source
+dataset outside version control and retain the generated JSON/CSV with the
+dataset provenance needed to reproduce a reported result.
 
 ## Metrics
 
-The report includes accuracy, precision, recall, F1, false-positive rate, false-negative rate, no-face/inconclusive count, and latency. **False negatives are especially important:** these are manipulated samples incorrectly reported as real.
+The report includes accuracy, precision, recall, F1, false-positive rate,
+false-negative rate, no-face/inconclusive count, errors, and mean/median/p95
+latency. **False negatives are especially important:** these are manipulated
+samples incorrectly reported as real. A metric with no applicable samples is
+written as `null`/`n/a`, never fabricated as zero.
 
 ## Recommended evaluation matrix
 
