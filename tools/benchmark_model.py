@@ -142,7 +142,11 @@ def main():
                 "confidence": result.get("confidence", ""),
                 "face_found": bool(result.get("faceFound", False)),
                 "face_count": result.get("facesFound", ""),
-                "inconclusive": bool(result.get("insufficientEvidence", False)),
+                # Older current-engine responses report no face with
+                # `faceFound: false` but no explicit insufficient-evidence
+                # flag. Treat both forms identically in the benchmark.
+                "inconclusive": bool(result.get(
+                    "insufficientEvidence", not result.get("faceFound", False))),
                 "latency_ms": round(elapsed_ms, 2),
                 "error": "",
             })
