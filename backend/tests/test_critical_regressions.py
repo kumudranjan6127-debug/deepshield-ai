@@ -205,7 +205,7 @@ def test_shared_inference_calls_are_serialized(monkeypatch):
         except BaseException as exc:  # surface worker failures in the test thread
             failures.append(exc)
 
-    threads = [threading.Thread(target=worker) for _ in range(2)]
+    threads = [threading.Thread(target=worker, daemon=True) for _ in range(2)]
     for thread in threads:
         thread.start()
     for thread in threads:
