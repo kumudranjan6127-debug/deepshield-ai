@@ -31,7 +31,8 @@ those answers survive.
 
 No `DATABASE_URL` means no database: feedback appends to JSONL exactly as
 before and analyses are not recorded. Local development needs nothing
-installed.
+installed. `DS_ANALYTICS=0` disables all persistence, including that JSONL
+fallback.
 
 **A failure here never fails a request.** Analytics that can take the
 product down is worse than no analytics, so every write is best-effort, runs
@@ -242,6 +243,9 @@ def record_feedback(entry):
     and a run of them on real photographs is the labelled set this project
     has never had. It is an evaluation signal and never a training label —
     nothing here reaches the model automatically."""
+    if not CFG.ANALYTICS:
+        return
+
     _append_jsonl(CFG.FEEDBACK_PATH, {**entry, "at": _now()})
 
     if enabled():

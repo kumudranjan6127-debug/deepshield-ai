@@ -56,8 +56,8 @@ def upload_not_found():
                     status=404)
 
 
-def not_a_video():
-    return ApiError("URL_NOT_VIDEO", "URL does not point to a video")
+def not_a_video(message: str = "URL does not point to a video"):
+    return ApiError("URL_NOT_VIDEO", message)
 
 
 def too_large(limit_mb: int):
