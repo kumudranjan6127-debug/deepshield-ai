@@ -1,19 +1,18 @@
 """Unified DeepShield synthetic-media inference policy.
 
-V3 remains the face-manipulation engine in ``face_inference.py``.  A second,
-optional full-frame AI-origin model supplies independent evidence for fully
-synthetic images and video frames.  The scores are never blindly averaged:
-strong evidence from either detector can flag media, while weak disagreement
-becomes an inconclusive result rather than a confident accusation.
+V3 remains the face-manipulation engine in ``face_inference.py``. A separate
+full-frame AI-origin model adds fully-synthetic-media evidence. Shared OpenCV
+DNN/YuNet state is serialized here because both APIs mutate their native model
+objects during inference and the production Gunicorn server uses threads.
 """
 from __future__ import annotations
+
+import threading
 
 import face_inference as _face
 import origin_detector as _origin
 from config import CFG
 
-# Explicit aliases keep imports/monkeypatches used by tooling and the historic
-# test suite working.  __getattr__ remains as a final compatibility fallback.
 risk_for = _face.risk_for
 certainty_for = _face.certainty_for
 certainty_bands = _face.certainty_bands
@@ -26,16 +25,27 @@ engine_available = _face.engine_available
 version_from = _face.version_from
 verifiers_enabled = _face.verifiers_enabled
 _Engine = _face._Engine
-_get_engine = _face._get_engine
 _get_hf_engines = _face._get_hf_engines
+
+# OpenCV DNN setInput()/forward() and YuNet setInputSize()/detect() operate on
+# shared mutable native objects. One lock around the V3 request path prevents
+# two Gunicorn threads from interleaving those operations. The origin model
+# has its own lock in origin_detector.py.
+_native_face_lock = threading.RLock()
 
 
 def __getattr__(name):
     return getattr(_face, name)
 
 
+def _get_engine():
+    with _native_face_lock:
+        return _face._get_engine()
+
+
 def engine_info() -> dict:
-    info = dict(_face.engine_info())
+    with _native_face_lock:
+        info = dict(_face.engine_info())
     if info:
         info["origin_detector"] = _origin.info()
     return info
@@ -74,12 +84,10 @@ def _combined_votes(base: dict, origin_score: float | None) -> list:
 
 def fuse_evidence(base: dict, origin_score: float | None,
                   threshold: float | None = None) -> dict:
-    """Fuse face and full-frame evidence without erasing either provenance."""
     out = dict(base)
     threshold = float(_origin.TRIGGER_SCORE if threshold is None else threshold)
     threshold = min(0.999, max(0.501, threshold))
     strong_real = 1.0 - threshold
-
     face_score = _face_score_from(base)
     if origin_score is not None:
         origin_score = min(1.0, max(0.0, float(origin_score)))
@@ -87,7 +95,6 @@ def fuse_evidence(base: dict, origin_score: float | None,
     if votes:
         out["ensemble"] = votes
 
-    # Strong V3 fake evidence remains authoritative for face manipulation.
     if face_score is not None and face_score >= 0.5:
         winning = face_score
         if origin_score is not None and origin_score >= threshold:
@@ -102,8 +109,6 @@ def fuse_evidence(base: dict, origin_score: float | None,
         out["disputed"] = bool(origin_score is not None and origin_score < 0.5)
         return out
 
-    # Strong whole-frame synthetic evidence catches the failure mode a
-    # face-only crop fundamentally cannot see.
     if origin_score is not None and origin_score >= threshold:
         out["prediction"] = "deepfake"
         out["confidence"] = int(round(origin_score * 100))
@@ -113,8 +118,6 @@ def fuse_evidence(base: dict, origin_score: float | None,
         out["disputed"] = bool(face_score is not None and face_score < 0.5)
         return out
 
-    # A face-trained model must not call a no-face image real.  The origin
-    # detector can answer only when it is strongly on one side.
     if face_score is None:
         if origin_score is not None and origin_score <= strong_real:
             out["prediction"] = "real"
@@ -123,7 +126,7 @@ def fuse_evidence(base: dict, origin_score: float | None,
             out["insufficientEvidence"] = False
             out.pop("reason", None)
         else:
-            out["prediction"] = "real"  # transport compatibility; see flag below
+            out["prediction"] = "real"
             out["confidence"] = 50
             out["findingType"] = "inconclusive"
             out["insufficientEvidence"] = True
@@ -133,8 +136,6 @@ def fuse_evidence(base: dict, origin_score: float | None,
             )
         return out
 
-    # Face evidence says real.  Mild disagreement is not enough to accuse the
-    # media, but it is enough to remove the confident-real presentation.
     out["findingType"] = "real_media"
     if origin_score is None:
         return out
@@ -153,7 +154,8 @@ def fuse_evidence(base: dict, origin_score: float | None,
 
 def analyze_file(path, file_type, frame_rate=None):
     frame_rate = CFG.DEFAULT_FRAME_RATE if frame_rate is None else frame_rate
-    base = _face.analyze_file(path, file_type, frame_rate)
+    with _native_face_lock:
+        base = _face.analyze_file(path, file_type, frame_rate)
 
     if file_type == "video":
         origin = _origin.score_video(path)
@@ -167,8 +169,8 @@ def analyze_file(path, file_type, frame_rate=None):
 
 
 def score_image(path) -> float:
-    """Combined fast score for evaluation; never computes a heatmap."""
-    face_score = _face.score_image(path)
+    with _native_face_lock:
+        face_score = _face.score_image(path)
     if not _origin.available():
         return face_score
     origin_score = _origin.score_image(path)
