@@ -308,8 +308,6 @@ def _read_request(live: bool):
         frame_rate = _frame_rate(request.form.get("frameRate", CFG.DEFAULT_FRAME_RATE))
         ext, kind = security.validate_upload(uploaded)
         declared = request.form.get("fileType", kind)
-        if declared not in ("image", "video"):
-            raise errors.bad_field("fileType", "image or video")
         if declared != kind:
             log.info("declared media type differed from decoded container; trusting file")
         if live:
@@ -327,9 +325,11 @@ def _read_request(live: bool):
     url = str(data.get("url") or "")
     file_name = str(data.get("fileName") or (
         url.rstrip("/").rsplit("/", 1)[-1] if url else "video.mp4"))
-    declared = str(data.get("fileType", "video"))
-    if declared not in ("image", "video"):
-        raise errors.bad_field("fileType", "image or video")
+    # Historic safe fallback: exactly "video" uses the video pipeline;
+    # everything else is treated as image rather than dispatched on arbitrary
+    # user-controlled strings. A staged file ignores this and trusts its
+    # already-validated container extension instead.
+    declared = "video" if str(data.get("fileType", "image")) == "video" else "image"
     file_size = data.get("fileSize")
     frame_rate = _frame_rate(data.get("frameRate", CFG.DEFAULT_FRAME_RATE))
 
