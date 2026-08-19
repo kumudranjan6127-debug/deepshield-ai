@@ -20,5 +20,5 @@ jobs:
           python -m pip install -r requirements.txt pytest
       - name: Compile backend
         run: python -m compileall -q backend
-      - name: Run backend tests
-        run: python -m pytest -q backend/tests
+      - name: Run repository tests
+        run: python -m pytest -q tests backend/tests
