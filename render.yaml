@@ -1,58 +1,47 @@
 # Render blueprint. `render.com/deploy` reads this; nothing here is secret.
 #
-# One worker, deliberately. The model peaks at ~260 MB of RSS and the free
-# tier gives 512 MB, so a second worker would not fit — and one worker also
-# keeps the rate limiter and the concurrency gate correct, since both are
-# in-process and two workers would mean two independent limits.
-#
-# Threads rather than workers: the concurrency gate already caps analyses at
-# two, so the extra threads serve health checks and static files while an
-# analysis runs instead of queueing behind it.
+# One worker, deliberately. Both inference engines are CPU-bound and the free
+# tier gives 512 MB, so duplicating them in multiple workers is wasteful. One
+# worker also keeps the in-process rate limiter/concurrency gate authoritative.
+# Threads rather than workers let health/static requests proceed while the
+# inference gate limits expensive analyses.
 services:
   - type: web
     name: deepshield
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt gunicorn "psycopg[binary]"
+    buildCommand: >
+      pip install -r requirements.txt gunicorn "psycopg[binary]"
+      && python scripts/fetch_origin_model.py
     startCommand: >
       gunicorn --pythonpath backend app:app
       --workers 1 --threads 4 --timeout 120
       --bind 0.0.0.0:$PORT
     healthCheckPath: /api/health
     envVars:
-      # Bind to every interface. The local default is 127.0.0.1 so a
-      # development run is not exposed by accident; a container must not
-      # keep that default or the service is unreachable.
       - key: DS_HOST
         value: 0.0.0.0
-      # Render terminates TLS and forwards the original scheme. Without
-      # TRUST_PROXY the app cannot tell, and would refuse every request as
-      # insecure once FORCE_HTTPS is on.
       - key: DS_TRUST_PROXY
         value: "1"
       - key: DS_FORCE_HTTPS
         value: "1"
-      # 5/min is two scans a minute once upload and analyze are counted -
-      # too tight for someone trying the demo. Still protective.
       - key: DS_RATE_LIMIT
         value: "20"
       - key: DS_LOG_JSON
         value: "1"
-      # The free instance is 0.1 CPU and this workload is CPU-bound - the
-      # benchmark uses ~2.2 cores locally. Halving the sampled frames halves
-      # video latency (measured: 60 frames 3.29s -> 20 frames 1.62s) and left
-      # the verdict unchanged on the test clip. It does mean less evidence
-      # for a clip that is only partly manipulated, which is the case the
-      # median/top-k combiner exists for. Raise it if that matters more than
-      # latency.
+      # Keep the face detector's video pass bounded on the small free CPU.
+      # The full-frame origin detector separately samples only a few frames.
       - key: DS_MAX_FRAMES
         value: "20"
+      - key: DS_AI_ORIGIN_FRAMES
+        value: "4"
+      - key: DS_AI_ORIGIN_THREADS
+        value: "1"
+      # Conservative until a DeepShield-owned sealed benchmark is large
+      # enough to calibrate this detector. Do not lower just to catch demos.
+      - key: DS_AI_ORIGIN_THRESHOLD
+        value: "0.85"
       - key: PYTHON_VERSION
         value: 3.12.7
-      # Feedback and analytics. Without DATABASE_URL the app writes feedback
-      # to a JSONL file, which this host erases on every spin-down - so on a
-      # free tier the database is the difference between collecting the
-      # answers and losing them. Set it in the dashboard, not here: it is a
-      # credential. See docs/ANALYTICS.md for what is and is not stored.
       - key: DS_ANALYTICS
         value: "1"
