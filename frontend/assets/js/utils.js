@@ -12,6 +12,7 @@ DS.KEYS = {
   SCAN: 'ds_scan',         // sessionStorage — the scan currently in flight / just finished
   HISTORY: 'ds_history',   // localStorage  — array of completed scans (newest first)
   SETTINGS: 'ds_settings', // localStorage  {frameRate, threshold, reducedMotion, autoDelete}
+  FEEDBACK: 'ds_feedback', // localStorage  — per-scan agreement/skip records
 };
 
 /* ---- Safe storage wrappers ---- */
@@ -116,7 +117,10 @@ DS.history = {
     DS.store.set(DS.KEYS.HISTORY, list.slice(0, 50)); // cap
   },
   find(id) { return DS.history.all().find(s => s.id === id) || null; },
-  clear() { DS.store.remove(DS.KEYS.HISTORY); },
+  clear() {
+    DS.store.remove(DS.KEYS.HISTORY);
+    DS.store.remove(DS.KEYS.FEEDBACK);
+  },
 };
 
 /* ---- Settings ---- */
