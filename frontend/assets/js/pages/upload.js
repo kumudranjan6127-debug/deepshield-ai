@@ -265,6 +265,13 @@
 
   async function startAnalysis() {
     if (!currentFile || !ready) return;
+
+    const mode = await DS.api.resolveMode();
+    if (mode === 'unavailable') {
+      DS.toast('The analysis server is unavailable. No simulated verdict was generated.', 'error');
+      return;
+    }
+
     const scan = {
       id: DS.util.uid(),
       fileName: currentFile.name,
@@ -277,8 +284,8 @@
 
     // Live engine: a File object can't survive page navigation, so stage
     // it on the server now; processing.html analyzes it via uploadId.
-    // Without a backend we skip this and the mock engine takes over.
-    if (await DS.api.resolveMode() === 'live') {
+    // Explicit demo/static environments skip this and use the simulated engine.
+    if (mode === 'live') {
       const originalLabel = els.startBtn.innerHTML;
       els.startBtn.disabled = true;
       els.removeBtn.disabled = true;
