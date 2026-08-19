@@ -127,19 +127,37 @@ def request_is_secure() -> bool:
     return False
 
 
+def _housekeeping_worker():
+    """Best-effort startup sweep plus the periodic cleanup loop."""
+    try:
+        security.cleanup_uploads()
+    except Exception:
+        log.warning("initial upload cleanup failed", exc_info=True)
+    try:
+        security.start_cleanup_thread()
+    except Exception:
+        log.warning("periodic upload cleanup did not start", exc_info=True)
+
+
 def _ensure_housekeeping():
-    """Start abandoned-upload cleanup once in this serving process."""
+    """Start abandoned-upload cleanup once without delaying user requests."""
     global _housekeeping_started
     if _housekeeping_started:
         return
     with _housekeeping_lock:
         if _housekeeping_started:
             return
-        # Sweep immediately so files left by a prior process do not wait for
-        # the first interval before being reclaimed.
-        security.cleanup_uploads()
-        security.start_cleanup_thread()
+        # Mark first so failures never turn housekeeping into a per-request
+        # retry loop. The potentially slow directory sweep runs off-thread.
         _housekeeping_started = True
+        try:
+            threading.Thread(
+                target=_housekeeping_worker,
+                name="upload-housekeeping-init",
+                daemon=True,
+            ).start()
+        except Exception:
+            log.warning("upload housekeeping did not start", exc_info=True)
 
 
 @app.before_request
@@ -474,10 +492,23 @@ def _read_request(live: bool):
     return file_name, file_type, file_size, frame_rate, None, False
 
 
-def _run_inference(media_path: str, file_type: str, frame_rate: float):
-    """Call the shared mutable model under a process-local lock."""
-    with engine_access_lock:
+def _run_inference(
+    media_path: str, file_type: str, frame_rate: float,
+    deadline: float | None = None,
+):
+    """Call the shared mutable model without exceeding the queue deadline."""
+    if deadline is None:
+        acquired = engine_access_lock.acquire()
+    else:
+        acquired = engine_access_lock.acquire(
+            timeout=max(0.0, deadline - time.monotonic())
+        )
+    if not acquired:
+        raise errors.server_busy()
+    try:
         return inference.analyze_file(media_path, file_type, frame_rate)
+    finally:
+        engine_access_lock.release()
 
 
 @app.post("/api/analyze")
@@ -498,10 +529,12 @@ def analyze():
 
         extras = {}
         if live and media_path:
-            # Extra callers wait at the gate; the shared OpenCV engine itself
-            # is serialized because its setInput/detect state is not reentrant.
+            # Gate wait plus engine-lock wait share one queue budget.
+            queue_deadline = time.monotonic() + max(0.0, CFG.QUEUE_WAIT_SECONDS)
             with gate:
-                result = _run_inference(media_path, file_type, frame_rate)
+                result = _run_inference(
+                    media_path, file_type, frame_rate, queue_deadline
+                )
             prediction = result["prediction"]
             confidence = result["confidence"]
             frames = result["framesAnalyzed"]
