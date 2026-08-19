@@ -82,6 +82,12 @@ def test_explicit_port_zero_is_rejected():
     assert exc.value.code == "BLOCKED_URL"
 
 
+def test_download_deadline_is_absolute():
+    with pytest.raises(errors.ApiError) as exc:
+        network._remaining(time.monotonic() - 0.001)
+    assert exc.value.code == "BLOCKED_URL"
+
+
 def test_dns_rebinding_to_loopback_is_rejected_before_connect(monkeypatch, tmp_path):
     answers = iter([
         [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))],
@@ -141,6 +147,7 @@ def test_failed_download_removes_partial_file(monkeypatch, tmp_path):
 
 def test_wsgi_housekeeping_starts_once(monkeypatch):
     calls = {"cleanup": 0, "thread": 0}
+    done = threading.Event()
 
     def cleanup():
         calls["cleanup"] += 1
@@ -148,17 +155,41 @@ def test_wsgi_housekeeping_starts_once(monkeypatch):
 
     def start_thread():
         calls["thread"] += 1
+        done.set()
         return object()
 
     monkeypatch.setattr(app_module.security, "cleanup_uploads", cleanup)
     monkeypatch.setattr(app_module.security, "start_cleanup_thread", start_thread)
-    monkeypatch.setattr(app_module, "_housekeeping_started", False)
+    app_module._housekeeping_started = False
 
     client = app_module.app.test_client()
-    client.get("/definitely-missing-one")
-    client.get("/definitely-missing-two")
+    try:
+        client.get("/definitely-missing-one")
+        client.get("/definitely-missing-two")
+        assert done.wait(timeout=1.0), "housekeeping worker did not run"
+        assert calls == {"cleanup": 1, "thread": 1}
+    finally:
+        # Do not let later tests start the real housekeeping thread.
+        app_module._housekeeping_started = True
 
-    assert calls == {"cleanup": 1, "thread": 1}
+
+def test_housekeeping_failure_does_not_fail_request(monkeypatch):
+    done = threading.Event()
+
+    def cleanup():
+        done.set()
+        raise OSError("test cleanup failure")
+
+    monkeypatch.setattr(app_module.security, "cleanup_uploads", cleanup)
+    monkeypatch.setattr(app_module.security, "start_cleanup_thread", lambda: object())
+    app_module._housekeeping_started = False
+
+    try:
+        response = app_module.app.test_client().get("/api/health")
+        assert response.status_code == 200
+        assert done.wait(timeout=1.0)
+    finally:
+        app_module._housekeeping_started = True
 
 
 def test_feedback_writes_are_rate_limited(monkeypatch):
@@ -177,6 +208,18 @@ def test_feedback_writes_are_rate_limited(monkeypatch):
         assert second.get_json()["error_code"] == "RATE_LIMITED"
     finally:
         app_module.limiter._hits.clear()
+
+
+def test_engine_lock_respects_queue_deadline():
+    app_module.engine_access_lock.acquire()
+    try:
+        with pytest.raises(errors.ApiError) as exc:
+            app_module._run_inference(
+                "x.jpg", "image", 1.0, deadline=time.monotonic()
+            )
+        assert exc.value.code == "BUSY"
+    finally:
+        app_module.engine_access_lock.release()
 
 
 def test_shared_inference_calls_are_serialized(monkeypatch):
@@ -202,7 +245,7 @@ def test_shared_inference_calls_are_serialized(monkeypatch):
         try:
             barrier.wait(timeout=1.0)
             app_module._run_inference("x.jpg", "image", 1.0)
-        except BaseException as exc:  # surface worker failures in the test thread
+        except BaseException as exc:  # noqa: BLE001 - surface worker failures
             failures.append(exc)
 
     threads = [threading.Thread(target=worker, daemon=True) for _ in range(2)]
