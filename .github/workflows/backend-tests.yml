@@ -2,7 +2,7 @@ name: Backend tests
 
 on:
   push:
-    branches: [main, 'fix/**']
+    branches: [main, 'fix/**', 'agent/**']
   pull_request:
     branches: [main]
 
@@ -20,5 +20,5 @@ jobs:
           python -m pip install -r requirements.txt pytest
       - name: Compile backend
         run: python -m compileall -q backend
-      - name: Run inference policy tests
-        run: python -m pytest -q backend/tests/test_inference_policy.py
+      - name: Run backend tests
+        run: python -m pytest -q backend/tests
