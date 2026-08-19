@@ -19,8 +19,8 @@ Open:  http://localhost:5000
 import json
 import logging
 import os
+import threading
 import time
-import urllib.request
 import uuid
 from datetime import datetime, timezone
 
@@ -28,6 +28,7 @@ from flask import Flask, g, jsonify, redirect, request, send_from_directory
 
 import errors
 import inference
+import network
 import security
 import store
 from config import CFG
@@ -37,6 +38,16 @@ log = logging.getLogger("deepshield")
 # Traffic controls, shared by every request
 limiter = security.RateLimiter(CFG.RATE_LIMIT, CFG.RATE_WINDOW_SECONDS)
 gate = security.InferenceGate(CFG.MAX_CONCURRENT_ANALYSES, CFG.QUEUE_WAIT_SECONDS)
+
+# OpenCV's shared DNN net and YuNet detector are mutable. Gunicorn serves this
+# app with multiple threads, so every access to the shared inference engine is
+# serialized to prevent cross-request setInput/detect races.
+engine_access_lock = threading.Lock()
+
+# WSGI servers import app.py; they never execute the __main__ block. Start
+# upload cleanup lazily in each serving process on its first request.
+_housekeeping_lock = threading.Lock()
+_housekeeping_started = False
 
 
 def client_key() -> str:
@@ -116,6 +127,44 @@ def request_is_secure() -> bool:
     return False
 
 
+def _housekeeping_worker():
+    """Best-effort startup sweep plus the periodic cleanup loop."""
+    try:
+        security.cleanup_uploads()
+    except Exception:
+        log.warning("initial upload cleanup failed", exc_info=True)
+    try:
+        security.start_cleanup_thread()
+    except Exception:
+        log.warning("periodic upload cleanup did not start", exc_info=True)
+
+
+def _ensure_housekeeping():
+    """Start abandoned-upload cleanup once without delaying user requests."""
+    global _housekeeping_started
+    if _housekeeping_started:
+        return
+    with _housekeeping_lock:
+        if _housekeeping_started:
+            return
+        # Mark first so failures never turn housekeeping into a per-request
+        # retry loop. The potentially slow directory sweep runs off-thread.
+        _housekeeping_started = True
+        try:
+            threading.Thread(
+                target=_housekeeping_worker,
+                name="upload-housekeeping-init",
+                daemon=True,
+            ).start()
+        except Exception:
+            log.warning("upload housekeeping did not start", exc_info=True)
+
+
+@app.before_request
+def ensure_housekeeping():
+    _ensure_housekeeping()
+
+
 @app.before_request
 def tag_request():
     """A short id for this request, echoed on failures.
@@ -187,12 +236,18 @@ def assets(path):
 
 # ---------------------------------------------------------- model identity
 
-def model_identity() -> dict:
+def _engine_info() -> dict:
+    """Read/load the shared engine without racing another request."""
+    with engine_access_lock:
+        return inference.engine_info()
+
+
+def model_identity(info: dict | None = None) -> dict:
     """What is actually loaded, asked of the engine rather than hardcoded.
 
     With no model present the fields say so rather than describing a model
     that is not running — the UI shows "Simulated (demo)" in that state."""
-    info = inference.engine_info()
+    info = _engine_info() if info is None else info
     if not info:
         return {
             "model_name": "DeepShield", "architecture": "—", "version": "—",
@@ -243,26 +298,6 @@ def discard(path: str | None):
         log.warning("could not remove %s: %s", path, e)
 
 
-def download_video(url: str, dest: str) -> int:
-    """Fetch a direct video with size and content-type caps. Returns bytes."""
-    req = urllib.request.Request(url, headers={"User-Agent": "DeepShield/1.0"})
-    with urllib.request.urlopen(req, timeout=CFG.URL_TIMEOUT_SECONDS) as r:
-        ctype = r.headers.get("Content-Type", "")
-        if "video" not in ctype and not url.lower().split("?")[0].endswith(".mp4"):
-            raise errors.not_a_video()
-        size = 0
-        with open(dest, "wb") as f:
-            while True:
-                chunk = r.read(256 * 1024)
-                if not chunk:
-                    break
-                size += len(chunk)
-                if size > CFG.MAX_URL_BYTES:
-                    raise errors.too_large(CFG.MAX_URL_BYTES // (1024 * 1024))
-                f.write(chunk)
-    return size
-
-
 # ---------------------------------------------------------- echo engine
 # Used when no model is present. Deliberately mirrors DS.api._verdictFor in
 # the frontend so a demo gives the same answer in either mode.
@@ -297,16 +332,17 @@ def echo_verdict(file_name, file_size, file_type):
 @app.get("/api/health")
 def health():
     live = inference.engine_available()
+    info = _engine_info() if live else {}
     return jsonify({
         "ok": True,
         "status": "healthy",
         "engine": "live" if live else "echo",
-        "model": model_identity(),
+        "model": model_identity(info),
         # The frontend labels confidence numbers with these, rather than
         # keeping its own copy of the thresholds.
         "certainty_bands": inference.certainty_bands(),
         "calibrated": False,   # no reliability curve has ever been measured
-        **inference.engine_info(),
+        **info,
     })
 
 
@@ -321,8 +357,9 @@ def version():
 
     Every value comes from the model's own metadata; nothing here is
     written down twice."""
-    identity = model_identity()
     live = inference.engine_available()
+    info = _engine_info() if live else {}
+    identity = model_identity(info)
     name = " ".join(x for x in (identity.get("model_name"), identity.get("version"))
                     if x and x != "—")
     return jsonify({
@@ -333,7 +370,7 @@ def version():
         "runtime": identity.get("runtime"),
         "device": identity.get("device"),
         "input_size": identity.get("input_size"),
-        "classes": inference.engine_info().get("classes"),
+        "classes": info.get("classes"),
         "calibrated": False,
     })
 
@@ -345,6 +382,10 @@ def feedback():
     Stores no media and nothing personal — the verdict and a thumbs
     up/down. This is an evaluation signal, never a training label:
     nothing here reaches the model automatically."""
+    # Feedback writes to disk and may also spawn a database-write thread.
+    # It needs the same abuse protection as uploads and analyses.
+    limiter.check(client_key())
+
     d = request.get_json(silent=True) or {}
     if not isinstance(d.get("agree"), bool):
         raise errors.bad_field("agree", "true or false")
@@ -440,7 +481,7 @@ def _read_request(live: bool):
             raise errors.upload_not_found()
         if url:
             path = new_temp_path(".mp4")
-            size = security.safe_download(url, path)   # scheme + DNS + IP + redirects
+            size = network.safe_download(url, path)
             try:
                 security.validate_media_file(path, "video")
             except Exception:
@@ -449,6 +490,25 @@ def _read_request(live: bool):
             return file_name, "video", size, frame_rate, path, True
 
     return file_name, file_type, file_size, frame_rate, None, False
+
+
+def _run_inference(
+    media_path: str, file_type: str, frame_rate: float,
+    deadline: float | None = None,
+):
+    """Call the shared mutable model without exceeding the queue deadline."""
+    if deadline is None:
+        acquired = engine_access_lock.acquire()
+    else:
+        acquired = engine_access_lock.acquire(
+            timeout=max(0.0, deadline - time.monotonic())
+        )
+    if not acquired:
+        raise errors.server_busy()
+    try:
+        return inference.analyze_file(media_path, file_type, frame_rate)
+    finally:
+        engine_access_lock.release()
 
 
 @app.post("/api/analyze")
@@ -469,9 +529,12 @@ def analyze():
 
         extras = {}
         if live and media_path:
-            # One analysis per worker slot; the rest wait, then get a 503
+            # Gate wait plus engine-lock wait share one queue budget.
+            queue_deadline = time.monotonic() + max(0.0, CFG.QUEUE_WAIT_SECONDS)
             with gate:
-                result = inference.analyze_file(media_path, file_type, frame_rate)
+                result = _run_inference(
+                    media_path, file_type, frame_rate, queue_deadline
+                )
             prediction = result["prediction"]
             confidence = result["confidence"]
             frames = result["framesAnalyzed"]
@@ -540,10 +603,6 @@ if __name__ == "__main__":
     setup_logging()
     log.info("DeepShield AI backend running at http://localhost:%d", CFG.PORT)
     log.info("config: %s", CFG.summary())
-
-    # Anything left staged from a previous run is already abandoned
-    security.cleanup_uploads()
-    security.start_cleanup_thread()
 
     print(f"DeepShield AI backend running at http://localhost:{CFG.PORT}")
     app.run(host=CFG.HOST, port=CFG.PORT, debug=CFG.DEBUG)
