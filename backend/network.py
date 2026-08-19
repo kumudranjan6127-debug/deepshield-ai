@@ -45,10 +45,19 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
 
 
 def _port(parts: urllib.parse.SplitResult) -> int:
+    """Return an explicit valid TCP port, or the scheme default."""
     try:
-        return parts.port or (443 if parts.scheme == "https" else 80)
+        port = parts.port
     except ValueError:
         raise errors.blocked_url("invalid port")
+    if port is None:
+        return 443 if parts.scheme == "https" else 80
+    # Port zero is not a valid remote service destination. Treating it as
+    # falsy and falling back to 80/443 silently changes the URL the caller
+    # supplied and can make validation describe a different connection.
+    if not 1 <= port <= 65535:
+        raise errors.blocked_url("invalid port")
+    return port
 
 
 def _host_header(parts: urllib.parse.SplitResult) -> str:
