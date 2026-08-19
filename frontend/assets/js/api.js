@@ -1,30 +1,42 @@
-/* ============================================================
-   DeepShield AI — api.js
-   Analysis engine interface.
+/* DeepShield analysis engine interface.
 
-   Live inference is authoritative. The simulated engine exists only for
-   static/demo deployments and is always explicitly marked simulated.
-   ============================================================ */
-
+Live inference is authoritative. Simulation is available only in an explicit
+local/static demo context; a production backend outage is an error, never a
+fake verdict.
+*/
 DS.api = {
   MODE: 'auto',
   ENDPOINT: '/api/analyze',
 
+  isExplicitDemo() {
+    if (DS.api.MODE === 'simulated') return true;
+    if (window.DS_DEMO_MODE === true) return true;
+    try {
+      if (new URLSearchParams(window.location.search).get('demo') === '1') return true;
+    } catch { /* old/non-browser test environment */ }
+    return window.location.protocol === 'file:' || window.location.port === '8000';
+  },
+
   async resolveMode() {
-    if (DS.api.MODE !== 'auto') return DS.api.MODE;
+    if (DS.api.MODE === 'live' || DS.api.MODE === 'simulated') return DS.api.MODE;
     const health = await DS.server.health();
-    return health && health.engine === 'live' ? 'live' : 'simulated';
+    if (health && health.engine === 'live') return 'live';
+    if (DS.api.isExplicitDemo()) return 'simulated';
+
+    const failure = new Error(
+      health
+        ? 'DeepShield model is unavailable. Start the live model before analyzing media.'
+        : 'DeepShield backend is unavailable. Check the server and try again.'
+    );
+    failure.code = health ? 'MODEL_UNAVAILABLE' : 'BACKEND_UNAVAILABLE';
+    failure.status = 503;
+    throw failure;
   },
 
   MODEL: {
-    name: 'MobileNetV3',
-    version: '1.0.0',
-    params: '—',
-    input: '224 × 224',
-    device: 'CPU',
-    backend: '—',
+    name: 'MobileNetV3', version: '1.0.0', params: '—', input: '224 × 224',
+    device: 'CPU', backend: '—',
   },
-
   CERTAINTY: [],
 
   async analyze(scan, hooks = {}) {
@@ -38,14 +50,12 @@ DS.api = {
     const { onStage = () => {}, onLog = () => {}, onProgress = () => {}, onEta = () => {} } = hooks;
     const isVideo = scan.fileType === 'video';
     const stages = DS.api._stages(isVideo);
-
     onLog('engine: DeepShield live (Flask · real inference)');
     onLog(`model:  ${DS.api.MODEL.name} (${DS.api.MODEL.params} params, CPU)`);
     onLog(`input:  ${scan.fileName}${scan.fileSize ? ` (${DS.util.formatBytes(scan.fileSize)})` : ''}`);
 
     const est = isVideo ? 20000 : 5000;
-    let pct = 0;
-    let lastStage = -1;
+    let pct = 0, lastStage = -1;
     const tick = setInterval(() => {
       pct = Math.min(92, pct + (92 - pct) * 0.055);
       onProgress(pct);
@@ -64,19 +74,28 @@ DS.api = {
     }, 300);
 
     try {
-      const res = await fetch(DS.api.ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scanId: scan.id || null,
-          uploadId: scan.uploadId || null,
-          url: scan.sourceUrl || null,
-          fileName: scan.fileName,
-          fileType: scan.fileType,
-          fileSize: scan.fileSize,
-          frameRate: DS.settings.get().frameRate,
-        }),
-      });
+      let res;
+      try {
+        res = await fetch(DS.api.ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scanId: scan.id || null,
+            uploadId: scan.uploadId || null,
+            url: scan.sourceUrl || null,
+            fileName: scan.fileName,
+            fileType: scan.fileType,
+            fileSize: scan.fileSize,
+            frameRate: DS.settings.get().frameRate,
+          }),
+        });
+      } catch (cause) {
+        const failure = new Error('DeepShield backend became unavailable during analysis. Try again.');
+        failure.code = 'BACKEND_UNAVAILABLE';
+        failure.status = 503;
+        failure.cause = cause;
+        throw failure;
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         const failure = new Error(err.error || `Analysis failed (${res.status})`);
@@ -130,7 +149,13 @@ DS.api = {
     return { prediction, confidence, riskLevel, framesAnalyzed, engine: 'simulated' };
   },
 
-  _analyzeSimulated(scan, hooks) {
+  _analyzeSimulated(scan, hooks = {}) {
+    if (!DS.api.isExplicitDemo() && DS.api.MODE !== 'simulated') {
+      return Promise.reject(Object.assign(
+        new Error('Simulation is disabled outside explicit demo mode.'),
+        { code: 'DEMO_DISABLED', status: 503 }
+      ));
+    }
     const { onStage = () => {}, onLog = () => {}, onProgress = () => {}, onEta = () => {} } = hooks;
     const isVideo = scan.fileType === 'video';
     const stages = DS.api._stages(isVideo);
