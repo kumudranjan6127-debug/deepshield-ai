@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = process.env.PORT || 8000;
-const ROOT = require('path').join(__dirname, 'frontend');
+const ROOT = path.join(__dirname, 'frontend');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -25,16 +25,70 @@ const MIME = {
   '.mp4': 'video/mp4',
 };
 
+const DEMO_HEALTH = {
+  ok: true,
+  status: 'healthy',
+  engine: 'echo',
+  model: {
+    model_name: 'DeepShield',
+    architecture: '—',
+    version: '—',
+    runtime: 'simulated',
+    input_size: null,
+    name: 'MobileNetV3',
+    params: '—',
+    input: '—',
+    backend: 'none',
+    device: 'CPU',
+  },
+  certainty_bands: [],
+  calibrated: false,
+};
+
 http.createServer((req, res) => {
-  let urlPath = decodeURIComponent(req.url.split('?')[0]);
+  const rawPath = String(req.url || '/').split('?')[0];
+
+  // The static server is an intentional demo environment. Advertise that
+  // explicitly so the frontend can distinguish it from a production backend
+  // that is simply unreachable.
+  if (rawPath === '/api/health') {
+    const body = JSON.stringify(DEMO_HEALTH);
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    return res.end(body);
+  }
+
+  let urlPath;
+  try {
+    urlPath = decodeURIComponent(rawPath);
+  } catch (err) {
+    if (err instanceof URIError) {
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('400 Bad Request');
+    }
+    throw err;
+  }
+
+  // Modern Node rejects NUL bytes in filesystem paths. Reject them at the
+  // HTTP boundary so malformed input cannot escape the normal error flow.
+  if (urlPath.includes('\0')) {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('400 Bad Request');
+  }
+
   if (urlPath === '/') urlPath = '/landing.html';
 
   const filePath = path.join(ROOT, path.normalize(urlPath));
-  if (!filePath.startsWith(ROOT)) { res.writeHead(403); return res.end('Forbidden'); }
+  if (!filePath.startsWith(ROOT)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('Forbidden');
+  }
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       return res.end('404 Not Found: ' + urlPath);
     }
     res.writeHead(200, {

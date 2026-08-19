@@ -3,7 +3,7 @@
    Analysis engine interface.
 
    Live inference is authoritative. The simulated engine exists only for
-   static/demo deployments and is always explicitly marked simulated.
+   explicit static/demo deployments and is always marked simulated.
    ============================================================ */
 
 DS.api = {
@@ -12,8 +12,19 @@ DS.api = {
 
   async resolveMode() {
     if (DS.api.MODE !== 'auto') return DS.api.MODE;
+
+    // Opening the static files directly is an explicit demo action: there is
+    // no HTTP backend to be unavailable. The zero-dependency dev server also
+    // advertises itself explicitly via /api/health with engine="echo".
+    if (typeof location !== 'undefined' && location.protocol === 'file:') {
+      return 'simulated';
+    }
+
     const health = await DS.server.health();
-    return health && health.engine === 'live' ? 'live' : 'simulated';
+    if (!health) return 'unavailable';
+    if (health.engine === 'live') return 'live';
+    if (health.engine === 'echo' || health.engine === 'simulated') return 'simulated';
+    return 'unavailable';
   },
 
   MODEL: {
@@ -29,9 +40,15 @@ DS.api = {
 
   async analyze(scan, hooks = {}) {
     const mode = await DS.api.resolveMode();
-    return mode === 'live'
-      ? DS.api._analyzeLive(scan, hooks)
-      : DS.api._analyzeSimulated(scan, hooks);
+    if (mode === 'live') return DS.api._analyzeLive(scan, hooks);
+    if (mode === 'simulated') return DS.api._analyzeSimulated(scan, hooks);
+
+    const failure = new Error(
+      'The analysis server is unavailable. No simulated verdict was generated.'
+    );
+    failure.code = 'SERVER_UNAVAILABLE';
+    failure.status = 503;
+    throw failure;
   },
 
   async _analyzeLive(scan, hooks = {}) {
