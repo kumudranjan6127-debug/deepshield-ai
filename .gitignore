@@ -5,31 +5,23 @@ __pycache__/
 
 # ---- Runtime data (recreated automatically) ----
 uploads/
-# user feedback log (ratings only, no media) — the comment must be on its
-# own line: git treats a trailing one as part of the pattern, so this rule
-# silently matched nothing and data/ was staged like any other folder.
 data/
+.deepshield.pid
 
 # ---- Firebase credentials ----
-# Copy frontend/assets/js/firebase-config.example.js -> firebase-config.js
-# and fill your own keys. Without it the app runs in demo-login mode.
 frontend/assets/js/firebase-config.js
 
-# ---- Regression clip built on demand when video_test/ is empty ----
-# The two committed clips are fixtures and stay tracked; only the
-# generated fallback is ignored.
+# ---- Regression clip built on demand ----
 training/video_test/generated_faces.mp4
 
-# ---- V4 dataset build (raw media, crops, manifests) ----
-# Raw datasets are not redistributable and crops are derived from them.
-# The seal itself lives in docs/v4_sealed_groups.txt so it survives a clean.
+# ---- V4 dataset build ----
 datasets/
 
-# ---- Evaluation datasets (large, licensed, reproducible from README) ----
+# ---- Evaluation datasets ----
 eval_data/*
 !eval_data/README.md
 
-# ---- Test media, rebuilt by tests/conftest.py on every run ----
+# ---- Test media ----
 tests/fixtures/
 .pytest_cache/
 
@@ -38,8 +30,9 @@ Thumbs.db
 .DS_Store
 *.log
 
-# ---- Server log (regenerated) ----
+# ---- Server log ----
 backend.log
+
 # Real failing cases - someone else's photographs, never committed.
 testcases/*
 !testcases/README.md
