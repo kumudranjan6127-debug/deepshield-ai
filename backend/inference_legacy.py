@@ -100,6 +100,12 @@ def aggregate_frames(p_fakes, weights=None, topk_fraction=None,
         raise ValueError("no frame scores to aggregate")
 
     w = dict(weights or CFG.VIDEO_WEIGHTS)
+    allowed = {"median", "mean", "top_k"}
+    unknown = set(w) - allowed
+    if unknown:
+        raise ValueError(
+            "unknown video aggregation weight(s): " + ", ".join(sorted(unknown))
+        )
     fraction = CFG.VIDEO_TOPK_FRACTION if topk_fraction is None else topk_fraction
     threshold = CFG.VIDEO_SUSPICIOUS_AT if suspicious_at is None else suspicious_at
 
@@ -240,7 +246,8 @@ def torch_available() -> bool:
         import torch  # noqa: F401
         import torchvision  # noqa: F401
         return True
-    except ImportError:
+    except Exception:
+        log.debug("torch/torchvision unavailable", exc_info=True)
         return False
 
 
@@ -335,7 +342,7 @@ class _Engine:
         import torch
         from torchvision import models
 
-        ckpt = torch.load(CKPT_PATH, map_location="cpu", weights_only=False)
+        ckpt = torch.load(CKPT_PATH, map_location="cpu", weights_only=True)
         self.meta = ckpt
         self.backend = "torch"
         self.checkpoint_name = os.path.basename(CKPT_PATH)
@@ -539,7 +546,7 @@ class _Engine:
         return self._probs_raw(self._face_crop(pil_image))
 
     def predict_image(self, image_path):
-        """→ (prediction 'real'|'deepfake', confidence int, frames=1)"""
+        """→ ((prediction 'real'|'deepfake', confidence int), frames=1)"""
         from PIL import Image
         # Context manager releases the file handle — without it Windows
         # blocks the post-analysis delete of the uploaded file.
@@ -570,43 +577,45 @@ class _Engine:
         fake_index = self.classes.index("fake")
 
         records, idx = [], 0
-        while len(records) < max_frames:
-            # Sampling at 1 fps from a 30 fps clip discards 29 frames out of
-            # every 30. `read()` fully decodes and colour-converts each one
-            # first; `grab()` advances the stream without paying for a frame
-            # nobody looks at. Same frames chosen, same scores, less work.
-            if idx % step:
-                if not cap.grab():
+        try:
+            while len(records) < max_frames:
+                # Sampling at 1 fps from a 30 fps clip discards 29 frames out of
+                # every 30. `read()` fully decodes and colour-converts each one
+                # first; `grab()` advances the stream without paying for a frame
+                # nobody looks at. Same frames chosen, same scores, less work.
+                if idx % step:
+                    if not cap.grab():
+                        break
+                    idx += 1
+                    continue
+
+                ok, frame = cap.read()
+                if not ok:
                     break
+
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                found = self._detect_face(Image.fromarray(rgb))
+                probs = self._probs_raw(found["crop"])
+
+                # 32x32 grey thumbnail of the crop we already made - the only
+                # extra work the temporal signals add per frame.
+                grey = cv2.cvtColor(self.np.array(found["crop"].convert("RGB")),
+                                    cv2.COLOR_RGB2GRAY)
+                thumb = cv2.resize(grey, (32, 32), interpolation=cv2.INTER_AREA)
+
+                records.append({
+                    "index": idx,
+                    "time": idx / fps,
+                    "pFake": float(probs[fake_index]),
+                    "box": found["box"],
+                    "origin": found["origin"],
+                    "frame": found["frame"],
+                    "landmarks": found["landmarks"],
+                    "thumb": thumb,
+                })
                 idx += 1
-                continue
-
-            ok, frame = cap.read()
-            if not ok:
-                break
-
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            found = self._detect_face(Image.fromarray(rgb))
-            probs = self._probs_raw(found["crop"])
-
-            # 32x32 grey thumbnail of the crop we already made - the only
-            # extra work the temporal signals add per frame.
-            grey = cv2.cvtColor(self.np.array(found["crop"].convert("RGB")),
-                                cv2.COLOR_RGB2GRAY)
-            thumb = cv2.resize(grey, (32, 32), interpolation=cv2.INTER_AREA)
-
-            records.append({
-                "index": idx,
-                "time": idx / fps,
-                "pFake": float(probs[fake_index]),
-                "box": found["box"],
-                "origin": found["origin"],
-                "frame": found["frame"],
-                "landmarks": found["landmarks"],
-                "thumb": thumb,
-            })
-            idx += 1
-        cap.release()
+        finally:
+            cap.release()
 
         if not records:
             raise ValueError("No readable frames in video")
@@ -737,7 +746,13 @@ def _get_engine() -> _Engine:
     """Singleton, but reloads automatically if the model file is replaced
     (dropping in a newly trained model needs no restart)."""
     global _engine, _engine_mtime
-    stamp = (_active_model_path(), os.path.getmtime(_active_model_path()))
+    path = _active_model_path()
+    try:
+        stamp = (path, os.path.getmtime(path))
+    except OSError:
+        if _engine is not None:
+            return _engine
+        raise
     if _engine is None or _engine_mtime != stamp:
         _engine = _Engine()
         _engine_mtime = stamp
