@@ -127,6 +127,14 @@ def engine_available() -> bool:
     return onnx_available() or (os.path.exists(CKPT_PATH) and torch_available())
 
 
+def _face_summary(face: dict) -> dict:
+    """Serializable geometry from a detector record; never expose PIL crops."""
+    return {
+        key: face.get(key)
+        for key in ("box", "origin", "frame", "landmarks")
+    }
+
+
 class _Engine(_legacy._Engine):
     """Known-good engine plus hardened no-face/multi-face video sampling."""
 
@@ -165,7 +173,7 @@ class _Engine(_legacy._Engine):
                 "faceFound": True,
                 "facesFound": len(found),
                 "framesAnalyzed": 1,
-                "selectedFace": selected,
+                "selectedFace": _face_summary(selected),
             }
 
     def predict_video(
@@ -276,7 +284,12 @@ def _active_model_path():
 def _get_engine():
     global _engine, _engine_mtime
     path = _active_model_path()
-    stamp = (path, os.path.getmtime(path))
+    try:
+        stamp = (path, os.path.getmtime(path))
+    except OSError:
+        if _engine is not None:
+            return _engine
+        raise
     if _engine is None or _engine_mtime != stamp:
         _engine = _Engine()
         _engine_mtime = stamp
@@ -332,12 +345,11 @@ def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
         score = float(agg["score"])
         if not any_face:
             score = 0.5
-
-        prediction = "deepfake" if score > 0.5 else "real"
-        confidence = (
-            50 if not any_face
-            else int(round(max(score, 1.0 - score) * 100))
-        )
+            prediction = "real"
+            confidence = 50
+        else:
+            prediction = "deepfake" if score >= 0.5 else "real"
+            confidence = int(round(max(score, 1.0 - score) * 100))
         hottest = sorted(records, key=lambda r: r["pFake"], reverse=True)
 
         return {
@@ -448,5 +460,5 @@ def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
         "disputed": disputed,
         "combiner": "own-led + verifier consensus",
         "explain": explain,
-        "selectedFace": selected,
+        "selectedFace": _face_summary(selected),
     }
