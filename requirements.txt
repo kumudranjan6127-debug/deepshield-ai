@@ -3,20 +3,15 @@
 #   Windows:      venv\Scripts\pip install -r requirements.txt
 #   macOS/Linux:  venv/bin/pip install -r requirements.txt
 #
-# This is the lean install (~160 MB). The model runs as ONNX through
-# OpenCV's DNN module, so PyTorch is NOT needed to use the app.
+# The primary face model runs as ONNX through OpenCV.  A small second ONNX
+# model, installed by scripts/fetch_origin_model.py, runs through onnxruntime
+# to inspect the complete frame for AI-generation evidence.
 
 flask>=3.1
-opencv-python-headless>=4.8   # face detection, video frames, and the model
-                              # itself. HEADLESS on purpose: the app calls no
-                              # cv2 GUI function, and the desktop build needs
-                              # libGL, which a server container does not have.
-                              # Installing the wrong one is the single most
-                              # common way a deploy of this shape fails.
-                              # Already have opencv-python? Uninstall it first:
-                              # the two packages conflict.
+opencv-python-headless>=4.8   # face detection, video frames, primary model
 pillow>=10.0
 numpy>=1.24
+onnxruntime>=1.19,<2          # optional full-frame AI-origin detector runtime
 
 
 # ---------------------------------------------------------------------
@@ -48,9 +43,7 @@ numpy>=1.24
 #
 # 5. Running the test suite:
 #      pip install pytest
-#    Then `python -m pytest` from the project root. The suite needs no
-#    server and no network; it builds its own test media from the sample
-#    faces already in training/.
+#    Then `python -m pytest` from the project root.
 #
 # 6. Server-side PDF reports (not used — the report page prints from the
 #    browser):
