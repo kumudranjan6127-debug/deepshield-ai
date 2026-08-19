@@ -543,7 +543,7 @@ def analyze():
             # did not emit are dropped rather than sent as null.
             extras = {k: result[k] for k in
                       ("ensemble", "disputed", "explain", "video",
-                       "faceFound", "facesFound")
+                       "faceFound", "facesFound", "insufficientEvidence", "reason")
                       if k in result}
         else:
             # No model, or a metadata-only request: the labelled demo engine

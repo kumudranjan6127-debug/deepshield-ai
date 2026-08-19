@@ -20,6 +20,10 @@ document.addEventListener('DOMContentLoaded', () => {
   bindDownload(scan);
 });
 
+function isInconclusive(scan) {
+  return Boolean(scan && (scan.insufficientEvidence === true || scan.faceFound === false));
+}
+
 /* ---- All reports: one row per scan in history, newest first ---- */
 function renderList(current) {
   const history = DS.history.all();
@@ -27,17 +31,20 @@ function renderList(current) {
 
   document.getElementById('report-count').textContent = history.length;
   document.getElementById('report-list').innerHTML = history.map(s => {
+    const inconclusive = isInconclusive(s);
     const isFake = s.prediction === 'deepfake';
     const active = current && s.id === current.id ? ' active' : '';
+    const badgeClass = inconclusive ? 'badge-warning'
+      : (isFake ? 'badge-danger' : 'badge-success');
+    const verdict = inconclusive ? 'Inconclusive' : (isFake ? 'Deepfake' : 'Real');
+    const score = inconclusive ? '' : ` · <span class="mono">${s.confidence}%</span>`;
     return `
       <a class="report-row${active}" href="report.html?id=${encodeURIComponent(s.id)}">
         <span class="report-row-main">
           <span class="report-row-name">${DS.util.escapeHtml(DS.util.truncate(s.fileName || '—', 34))}</span>
           <span class="report-row-meta text-xs">${DS.util.formatDate(s.completedAt)}</span>
         </span>
-        <span class="badge ${isFake ? 'badge-danger' : 'badge-success'}">
-          ${isFake ? 'Deepfake' : 'Real'} · <span class="mono">${s.confidence}%</span>
-        </span>
+        <span class="badge ${badgeClass}">${verdict}${score}</span>
       </a>`;
   }).join('');
 
@@ -79,7 +86,8 @@ function renderReport(scan) {
 
   const settings = DS.settings.get();
   const model = DS.api.MODEL;
-  const isFake = scan.prediction === 'deepfake';
+  const inconclusive = isInconclusive(scan);
+  const isFake = !inconclusive && scan.prediction === 'deepfake';
   const isVideo = scan.fileType === 'video';
   const risk = scan.riskLevel || 'Medium';
 
@@ -88,9 +96,11 @@ function renderReport(scan) {
   set('doc-date', 'Generated ' + DS.util.formatDate(new Date().toISOString()));
 
   /* 2. Verdict strip */
-  document.getElementById('verdict-strip').classList.add(isFake ? 'deepfake' : 'real');
-  set('verdict-text', isFake ? 'LIKELY DEEPFAKE' : 'LIKELY REAL');
-  set('verdict-conf', `${scan.confidence}%`);
+  const strip = document.getElementById('verdict-strip');
+  if (!inconclusive) strip.classList.add(isFake ? 'deepfake' : 'real');
+  set('verdict-text', inconclusive ? 'INCONCLUSIVE — NO FACE'
+    : (isFake ? 'LIKELY DEEPFAKE' : 'LIKELY REAL'));
+  set('verdict-conf', inconclusive ? 'No model verdict' : `${scan.confidence}%`);
 
   /* 2b. Analyzed media — photo + sensitivity heatmap (when available) */
   const photo = scan.previewDataUrl || null;
@@ -107,11 +117,11 @@ function renderReport(scan) {
       document.getElementById('doc-photo').src = photo;
       document.getElementById('doc-photo-wrap').hidden = false;
     }
-    if (heat) {
+    if (heat && !inconclusive) {
       document.getElementById('doc-heatmap').src = heat;
       document.getElementById('doc-heat-wrap').hidden = false;
     }
-    if (scan.explain && scan.explain.note) {
+    if (scan.explain && scan.explain.note && !inconclusive) {
       const focus = document.getElementById('doc-focus');
       focus.textContent = scan.explain.note;
       focus.hidden = false;
@@ -120,8 +130,8 @@ function renderReport(scan) {
 
   const riskBadge = document.getElementById('risk-badge');
   const riskClass = { Low: 'badge-success', Medium: 'badge-warning', High: 'badge-danger' };
-  riskBadge.className = `badge ${riskClass[risk] || 'badge-warning'}`;
-  riskBadge.textContent = `${risk} risk`;
+  riskBadge.className = `badge ${inconclusive ? 'badge-warning' : (riskClass[risk] || 'badge-warning')}`;
+  riskBadge.textContent = inconclusive ? 'No verdict' : `${risk} risk`;
 
   /* 3. File details */
   set('f-name', scan.fileName || '—');
@@ -131,9 +141,9 @@ function renderReport(scan) {
   set('f-uploaded', DS.util.formatDate(scan.createdAt));
 
   /* 4. Detection outcome */
-  set('d-prediction', isFake ? 'Deepfake' : 'Real');
-  set('d-confidence', `${scan.confidence}%`);
-  set('d-risk', risk);
+  set('d-prediction', inconclusive ? 'Inconclusive' : (isFake ? 'Deepfake' : 'Real'));
+  set('d-confidence', inconclusive ? '—' : `${scan.confidence}%`);
+  set('d-risk', inconclusive ? 'No verdict' : risk);
   set('d-threshold', `${settings.threshold}%`);
 
   /* 5. Analysis details */
@@ -161,9 +171,8 @@ function renderReport(scan) {
 function scopeSentence(scan) {
   if (scan.faceFound === undefined) return '';
   if (scan.faceFound === false) {
-    return ' No face was detected, so the whole frame was analysed. This '
-      + 'model is trained on faces, and a score produced this way is not '
-      + 'evidence about the media - it should be read as no result.';
+    return ' No face was detected. This model is trained on faces, so no '
+      + 'face-model verdict was produced for this media.';
   }
   const faces = Number(scan.facesFound || 0);
   if (faces > 1) {
@@ -177,6 +186,12 @@ function scopeSentence(scan) {
 
 /* ---- Summary paragraph, templated per verdict ---- */
 function buildSummary(scan) {
+  if (isInconclusive(scan)) {
+    return (scan.reason ||
+      'No usable face was detected, so the face-trained detector could not produce a reliable authenticity verdict for this media.')
+      + ' This report is intentionally inconclusive and should not be read as evidence that the media is real.';
+  }
+
   const frames = scan.framesAnalyzed || 1;
   const frameTxt = `${frames} ${frames === 1 ? 'frame' : 'frames'}`;
   const media = scan.fileType === 'video' ? 'video' : 'image';

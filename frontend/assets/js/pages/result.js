@@ -15,7 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  const isFake = scan.prediction === 'deepfake';
+  const inconclusive = isInconclusive(scan);
+  const isFake = !inconclusive && scan.prediction === 'deepfake';
   const isVideo = scan.fileType === 'video';
   const reportHref = `report.html?id=${encodeURIComponent(scan.id || '')}`;
 
@@ -28,9 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
   renderMedia(scan, isVideo);
   renderMeta(scan, isVideo);
   renderModel();
-  renderVerdict(scan, isFake, isVideo);
+  renderVerdict(scan, isFake, isVideo, inconclusive);
   renderMetrics(scan);
   renderInsights(scan);
+  renderScope(scan);
   renderVideo(scan);
   renderVerdictFacts(scan);
   renderWhy(scan);
@@ -42,6 +44,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('ds:server-ready', renderCertainty);
   document.addEventListener('ds:server-ready', () => renderVerdictFacts(scan));
 });
+
+function isInconclusive(scan) {
+  return Boolean(scan && (scan.insufficientEvidence === true || scan.faceFound === false));
+}
 
 /* ---- Analysis insights: judge votes + sensitivity heatmap ---- */
 function renderInsights(scan) {
@@ -80,7 +86,6 @@ function renderInsights(scan) {
     note.hidden = false;
   }
   if (scan.disputed) document.getElementById('disputed-chip').hidden = false;
-  renderScope(scan);
 
   DS.icons();
 }
@@ -112,11 +117,9 @@ function renderScope(scan) {
   const faces = Number(scan.facesFound || 0);
 
   if (scan.faceFound === false) {
-    title.textContent = 'No face detected';
-    body.textContent =
-      'The whole image was analysed instead. This model was trained only on ' +
-      'faces, so the score above is not evidence about this picture - treat ' +
-      'it as no answer rather than a weak one.';
+    title.textContent = 'No face detected — no verdict';
+    body.textContent = scan.reason ||
+      'This detector is trained on faces. No face-model score was produced for this media, so the result is inconclusive rather than real.';
   } else if (faces > 1) {
     title.textContent = `${faces} faces detected`;
     body.textContent =
@@ -195,7 +198,7 @@ function renderVideo(scan) {
   const signals = [
     ['Frames with a face', t.facesFound != null && t.framesSampled != null
       ? `${t.facesFound} / ${t.framesSampled}` : null,
-      'Frames where a face was detected. The rest were scored as whole frames.'],
+      'Frames where a face was detected and scored. No-face frames contribute neutral evidence rather than a whole-frame face-model score.'],
     ['Face position jitter', t.facePositionJitter,
       'How much the face moved around the frame, as a fraction of frame size'],
     ['Face size jitter', t.faceSizeJitter,
@@ -283,7 +286,7 @@ let verdictCtx = null;
 
 function bandFor(scan, confidence) {
   const bands = DS.api.CERTAINTY || [];
-  if (!bands.length) return null;
+  if (!bands.length || isInconclusive(scan)) return null;
   return (scan.certainty && bands.find(b => b.key === scan.certainty))
       || bands.find(b => confidence >= b.from)
       || null;
@@ -332,7 +335,7 @@ function renderVerdictFacts(scan) {
 function renderWhy(scan) {
   const block = document.getElementById('verdict-why');
   const list = document.getElementById('why-list');
-  if (!block || !list) return;
+  if (!block || !list || isInconclusive(scan)) return;
 
   const explain = scan.explain || {};
   const regions = Array.isArray(explain.regions) ? explain.regions : [];
@@ -355,10 +358,17 @@ function renderWhy(scan) {
 
 function renderCertainty() {
   if (!verdictCtx) return;
-  const { scan, confidence, isFake, unit } = verdictCtx;
-  const band = bandFor(scan, confidence);
-
+  const { scan, confidence, isFake, unit, inconclusive } = verdictCtx;
   const chip = document.getElementById('certainty-chip');
+
+  if (inconclusive) {
+    if (chip) chip.hidden = true;
+    document.getElementById('verdict-note').textContent = scan.reason ||
+      'No usable face was detected, so the face-trained model did not produce a verdict for this media.';
+    return;
+  }
+
+  const band = bandFor(scan, confidence);
   if (chip && band) {
     chip.textContent = band.label;
     chip.hidden = false;
@@ -374,17 +384,17 @@ function renderCertainty() {
 }
 
 /* ---- Verdict hero: ring, badge, risk chip, explanation ---- */
-function renderVerdict(scan, isFake, isVideo) {
+function renderVerdict(scan, isFake, isVideo, inconclusive) {
   const confidence = Math.max(0, Math.min(100, Math.round(scan.confidence || 0)));
 
   /* Confidence ring — sweep animated via CSS transition on dashoffset */
   const ring = document.getElementById('ring-value');
   const C = 2 * Math.PI * 80; // r = 80 in the 180×180 viewBox
-  ring.classList.add(isFake ? 'fake' : 'real');
+  if (!inconclusive) ring.classList.add(isFake ? 'fake' : 'real');
   ring.style.strokeDasharray = String(C);
   ring.style.strokeDashoffset = String(C);
-  document.getElementById('conf-ring')
-    .setAttribute('aria-label', `Detection confidence ${confidence}%`);
+  document.getElementById('conf-ring').setAttribute(
+    'aria-label', inconclusive ? 'No model verdict' : `Detection confidence ${confidence}%`);
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -396,23 +406,28 @@ function renderVerdict(scan, isFake, isVideo) {
 
   /* Verdict badge */
   const badge = document.getElementById('verdict-badge');
-  badge.classList.add(isFake ? 'badge-danger' : 'badge-success');
-  badge.innerHTML = `
-    <i data-lucide="${isFake ? 'alert-triangle' : 'shield-check'}" class="icon"></i>
-    ${isFake ? 'Likely Deepfake' : 'Likely Real'}
-  `;
+  badge.classList.add(inconclusive ? 'badge-warning' : (isFake ? 'badge-danger' : 'badge-success'));
+  badge.innerHTML = inconclusive
+    ? '<i data-lucide="circle-help" class="icon"></i> Inconclusive — no face'
+    : `<i data-lucide="${isFake ? 'alert-triangle' : 'shield-check'}" class="icon"></i>
+       ${isFake ? 'Likely Deepfake' : 'Likely Real'}`;
 
   /* Risk chip */
-  const risk = scan.riskLevel || (isFake ? 'High' : 'Low');
-  const riskClass = { Low: 'badge-success', Medium: 'badge-warning', High: 'badge-danger' }[risk]
-    || 'badge-warning';
   const chip = document.getElementById('risk-chip');
-  chip.classList.add(riskClass);
-  chip.textContent = `Risk level: ${risk}`;
+  if (inconclusive) {
+    chip.classList.add('badge-warning');
+    chip.textContent = 'No verdict';
+  } else {
+    const risk = scan.riskLevel || (isFake ? 'High' : 'Low');
+    const riskClass = { Low: 'badge-success', Medium: 'badge-warning', High: 'badge-danger' }[risk]
+      || 'badge-warning';
+    chip.classList.add(riskClass);
+    chip.textContent = `Risk level: ${risk}`;
+  }
 
   /* Certainty band + one-sentence explanation. The wording is the
      server's, not ours — see renderCertainty. */
-  verdictCtx = { scan, confidence, isFake, unit: isVideo ? 'frames' : 'regions' };
+  verdictCtx = { scan, confidence, isFake, unit: isVideo ? 'frames' : 'regions', inconclusive };
   renderCertainty();
 
   DS.icons();
@@ -423,13 +438,17 @@ function renderVerdict(scan, isFake, isVideo) {
    Sent to the backend (rating only, no media) and mirrored locally so
    the dashboard can show it without a server. Never a training label. */
 function bindFeedback(scan) {
+  const card = document.getElementById('feedback-card');
+  if (isInconclusive(scan)) {
+    card.hidden = true;
+    return;
+  }
+
   const ask = document.getElementById('feedback-ask');
   const thanks = document.getElementById('feedback-thanks');
 
-  const card = document.getElementById('feedback-card');
-
   /* Answered or skipped before → don't ask again */
-  const prior = DS.store.get('ds_feedback', []).find(f => f.scanId === scan.id);
+  const prior = DS.store.get(DS.KEYS.FEEDBACK, []).find(f => f.scanId === scan.id);
   if (prior) {
     if (prior.skipped) card.hidden = true;
     else { ask.hidden = true; thanks.hidden = false; }
@@ -438,9 +457,9 @@ function bindFeedback(scan) {
 
   /* Remember the outcome locally; `skipped` entries are excluded from stats */
   const remember = entry => {
-    const local = DS.store.get('ds_feedback', []);
+    const local = DS.store.get(DS.KEYS.FEEDBACK, []);
     local.unshift({ ...entry, scanId: scan.id, at: new Date().toISOString() });
-    DS.store.set('ds_feedback', local.slice(0, 200));
+    DS.store.set(DS.KEYS.FEEDBACK, local.slice(0, 200));
   };
 
   const send = agree => {
