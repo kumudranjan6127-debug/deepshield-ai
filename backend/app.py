@@ -1,13 +1,6 @@
 """DeepShield AI Flask backend.
 
-The application layer deliberately stays thin:
-
-    Frontend -> API -> validation/security -> inference -> response
-
-Model facts come from inference.py, limits from config.py, and upload/URL
-security from security.py.  The API forwards detector provenance instead of
-collapsing an AI-generated/inconclusive result back into a generic real/fake
-label.
+Frontend -> API -> validation/security -> inference -> response.
 """
 from __future__ import annotations
 
@@ -63,8 +56,7 @@ def setup_logging():
     if CFG.LOG_FILE:
         from logging.handlers import RotatingFileHandler
         handlers.append(RotatingFileHandler(
-            CFG.LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3,
-            encoding="utf-8"))
+            CFG.LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"))
     root = logging.getLogger()
     root.setLevel(level)
     for handler in list(root.handlers):
@@ -79,6 +71,9 @@ CFG.ensure_dirs()
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = CFG.MAX_UPLOAD_BYTES
 errors.register(app)
+# Gunicorn/WSGI imports this module and never runs __main__. The security
+# facade makes this call idempotent, so every serving process gets one sweeper.
+security.start_cleanup_thread()
 
 
 def request_is_secure() -> bool:
@@ -232,13 +227,9 @@ def health():
     live = inference.engine_available()
     info = inference.engine_info()
     return jsonify({
-        "ok": True,
-        "status": "healthy",
-        "engine": "live" if live else "echo",
-        "model": model_identity(),
-        "certainty_bands": inference.certainty_bands(),
-        "calibrated": bool(info.get("calibrated", False)),
-        **info,
+        "ok": True, "status": "healthy", "engine": "live" if live else "echo",
+        "model": model_identity(), "certainty_bands": inference.certainty_bands(),
+        "calibrated": bool(info.get("calibrated", False)), **info,
     })
 
 
@@ -250,14 +241,10 @@ def version():
     name = " ".join(x for x in (identity.get("model_name"), identity.get("version"))
                     if x and x != "—")
     return jsonify({
-        "status": "healthy",
-        "engine": "live" if live else "simulated",
-        "model": name or "unknown",
-        "architecture": identity.get("architecture"),
-        "runtime": identity.get("runtime"),
-        "device": identity.get("device"),
-        "input_size": identity.get("input_size"),
-        "classes": info.get("classes"),
+        "status": "healthy", "engine": "live" if live else "simulated",
+        "model": name or "unknown", "architecture": identity.get("architecture"),
+        "runtime": identity.get("runtime"), "device": identity.get("device"),
+        "input_size": identity.get("input_size"), "classes": info.get("classes"),
         "calibrated": bool(info.get("calibrated", False)),
         "origin_detector": info.get("origin_detector"),
     })
@@ -265,6 +252,9 @@ def version():
 
 @app.post("/api/feedback")
 def feedback():
+    # Feedback is unauthenticated and writes persistent state when enabled; it
+    # therefore gets the same per-client abuse control as uploads/analysis.
+    limiter.check(client_key())
     d = request.get_json(silent=True) or {}
     if not isinstance(d.get("agree"), bool):
         raise errors.bad_field("agree", "true or false")
@@ -301,7 +291,6 @@ def upload():
 
 
 def _read_request(live: bool):
-    """Return name, kind, bytes, frame rate, local path, and ownership flag."""
     if "file" in request.files:
         uploaded = request.files["file"]
         file_name = uploaded.filename or "upload"
@@ -325,10 +314,6 @@ def _read_request(live: bool):
     url = str(data.get("url") or "")
     file_name = str(data.get("fileName") or (
         url.rstrip("/").rsplit("/", 1)[-1] if url else "video.mp4"))
-    # Historic safe fallback: exactly "video" uses the video pipeline;
-    # everything else is treated as image rather than dispatched on arbitrary
-    # user-controlled strings. A staged file ignores this and trusts its
-    # already-validated container extension instead.
     declared = "video" if str(data.get("fileType", "image")) == "video" else "image"
     file_size = data.get("fileSize")
     frame_rate = _frame_rate(data.get("frameRate", CFG.DEFAULT_FRAME_RATE))
@@ -351,7 +336,6 @@ def _read_request(live: bool):
                 discard(path)
                 raise
             return file_name, "video", size, frame_rate, path, True
-
     return file_name, declared, file_size, frame_rate, None, False
 
 
@@ -368,14 +352,11 @@ def analyze():
     live = inference.engine_available()
     media_path = None
     owned = False
-
     incoming_json = request.get_json(silent=True) or {}
     scan_id = str(incoming_json.get("scanId") or request.form.get("scanId") or "")[:64]
-
     try:
         (file_name, file_type, file_size,
          frame_rate, media_path, owned) = _read_request(live)
-
         extras = {}
         if live and media_path:
             with gate:
@@ -392,28 +373,20 @@ def analyze():
         engine_used = "live" if (live and media_path) else "simulated"
         log.info("analyzed %s media -> %s %d%% in %d ms",
                  file_type, prediction, confidence, latency_ms)
-
+        risk = inference.risk_for(prediction, confidence)
         payload = {
-            "ok": True,
-            "prediction": prediction,
-            "confidence": confidence,
-            "engine": engine_used,
-            "riskLevel": inference.risk_for(prediction, confidence),
-            "risk": inference.risk_for(prediction, confidence).lower(),
+            "ok": True, "prediction": prediction, "confidence": confidence,
+            "engine": engine_used, "riskLevel": risk, "risk": risk.lower(),
             "certainty": inference.certainty_for(confidence),
-            "framesAnalyzed": frames,
-            "processingTime": latency_ms,
-            "model": identity["name"],
-            "device": identity["device"],
-            "completedAt": datetime.now(timezone.utc).isoformat(),
-            **extras,
+            "framesAnalyzed": frames, "processingTime": latency_ms,
+            "model": identity["name"], "device": identity["device"],
+            "completedAt": datetime.now(timezone.utc).isoformat(), **extras,
         }
-
         try:
             store.record_analysis(
-                scan_id=scan_id, file_name=file_name,
-                file_type=file_type, file_bytes=file_size, result=payload,
-                identity=identity, latency_ms=latency_ms, engine=engine_used)
+                scan_id=scan_id, file_name=file_name, file_type=file_type,
+                file_bytes=file_size, result=payload, identity=identity,
+                latency_ms=latency_ms, engine=engine_used)
         except Exception:
             log.warning("analytics skipped for this scan", exc_info=True)
         return jsonify(payload)
@@ -426,7 +399,5 @@ if __name__ == "__main__":
     setup_logging()
     log.info("DeepShield AI backend running at http://localhost:%d", CFG.PORT)
     log.info("config: %s", CFG.summary())
-    security.cleanup_uploads()
-    security.start_cleanup_thread()
     print(f"DeepShield AI backend running at http://localhost:{CFG.PORT}")
     app.run(host=CFG.HOST, port=CFG.PORT, debug=CFG.DEBUG)
