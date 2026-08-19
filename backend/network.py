@@ -11,7 +11,9 @@ time-of-use window for DNS rebinding.
 """
 import http.client
 import os
+import socket
 import ssl
+import time
 import urllib.parse
 
 import errors
@@ -24,7 +26,7 @@ _REDIRECTS = {301, 302, 303, 307, 308}
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
     """HTTPS connection whose TCP peer is an already-validated IP address."""
 
-    def __init__(self, ip: str, server_hostname: str, port: int, timeout: int):
+    def __init__(self, ip: str, server_hostname: str, port: int, timeout: float):
         self._tls_server_hostname = server_hostname
         super().__init__(
             host=ip,
@@ -37,6 +39,10 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
         self.sock = self._create_connection(
             (self.host, self.port), self.timeout, self.source_address
         )
+        try:
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            pass
         if self._tunnel_host:
             self._tunnel()
         self.sock = self._context.wrap_socket(
@@ -49,7 +55,7 @@ def _port(parts: urllib.parse.SplitResult) -> int:
     try:
         port = parts.port
     except ValueError:
-        raise errors.blocked_url("invalid port")
+        raise errors.blocked_url("invalid port") from None
     if port is None:
         return 443 if parts.scheme == "https" else 80
     # Port zero is not a valid remote service destination. Treating it as
@@ -75,24 +81,23 @@ def _target(parts: urllib.parse.SplitResult) -> str:
     return target
 
 
-def _open_once(url: str):
+def _open_once(url: str, timeout: float | None = None):
     """Open one request while pinning the connection to a validated address."""
     parts = urllib.parse.urlsplit(url)
     hostname = parts.hostname or ""
     addresses = security.resolve_public(hostname)
     port = _port(parts)
     last_error = None
+    timeout = CFG.URL_TIMEOUT_SECONDS if timeout is None else max(0.001, float(timeout))
 
     for address in addresses:
         conn = None
         try:
             if parts.scheme == "https":
-                conn = _PinnedHTTPSConnection(
-                    address, hostname, port, CFG.URL_TIMEOUT_SECONDS
-                )
+                conn = _PinnedHTTPSConnection(address, hostname, port, timeout)
             else:
                 conn = http.client.HTTPConnection(
-                    address, port=port, timeout=CFG.URL_TIMEOUT_SECONDS
+                    address, port=port, timeout=timeout
                 )
             conn.request(
                 "GET",
@@ -113,15 +118,25 @@ def _open_once(url: str):
     raise errors.blocked_url(f"could not connect to validated host: {detail}")
 
 
+def _remaining(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise errors.blocked_url("download exceeded its time budget")
+    return remaining
+
+
 def safe_download(url: str, dest: str) -> int:
     """Fetch a video with SSRF, redirect, type, timeout and size protections."""
     current = security.validate_url(url)
+    # A socket timeout bounds one blocked operation, not a trickling transfer.
+    # One absolute budget spans redirects, connection setup and the body.
+    deadline = time.monotonic() + max(0.001, float(CFG.URL_TIMEOUT_SECONDS))
 
     try:
         for _hop in range(CFG.MAX_REDIRECTS + 1):
             conn = response = None
             try:
-                conn, response = _open_once(current)
+                conn, response = _open_once(current, _remaining(deadline))
 
                 if response.status in _REDIRECTS:
                     target = response.getheader("Location")
@@ -157,6 +172,10 @@ def safe_download(url: str, dest: str) -> int:
                 size = 0
                 with open(dest, "wb") as f:
                     while True:
+                        remaining = _remaining(deadline)
+                        sock = getattr(conn, "sock", None)
+                        if sock is not None:
+                            sock.settimeout(max(0.001, remaining))
                         chunk = response.read(256 * 1024)
                         if not chunk:
                             break
