@@ -6,12 +6,40 @@
 
 window.DS = window.DS || {};
 
+/* ---- Deployment-aware API bridge ----
+   The Flask app serves /api/* on localhost and Render. GitHub Pages is
+   frontend-only, so relative /api/* requests would otherwise hit GitHub
+   Pages and fail before a selected local file ever reaches the model.
+
+   Rewrite only DeepShield API calls when the UI is running on this repo's
+   GitHub Pages origin. Every other fetch stays untouched. */
+DS.API_BASES = {
+  'kumudranjan6127-debug.github.io': 'https://deepshield-nque.onrender.com',
+};
+DS.API_BASE = DS.API_BASES[String(window.location.hostname || '').toLowerCase()] || '';
+DS.apiUrl = function apiUrl(path) {
+  const value = String(path || '');
+  if (!DS.API_BASE || !value.startsWith('/api/')) return value;
+  return DS.API_BASE + value;
+};
+
+if (DS.API_BASE && typeof window.fetch === 'function') {
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = function deepshieldFetch(input, init) {
+    if (typeof input === 'string' && input.startsWith('/api/')) {
+      return nativeFetch(DS.apiUrl(input), init);
+    }
+    return nativeFetch(input, init);
+  };
+}
+
 /* ---- Storage keys (single source of truth) ---- */
 DS.KEYS = {
   USER: 'ds_user',         // localStorage  {name, email, loggedInAt}
   SCAN: 'ds_scan',         // sessionStorage — the scan currently in flight / just finished
   HISTORY: 'ds_history',   // localStorage  — array of completed scans (newest first)
   SETTINGS: 'ds_settings', // localStorage  {frameRate, threshold, reducedMotion, autoDelete}
+  FEEDBACK: 'ds_feedback', // localStorage  — per-scan agreement/skip records
 };
 
 /* ---- Safe storage wrappers ---- */
@@ -116,7 +144,10 @@ DS.history = {
     DS.store.set(DS.KEYS.HISTORY, list.slice(0, 50)); // cap
   },
   find(id) { return DS.history.all().find(s => s.id === id) || null; },
-  clear() { DS.store.remove(DS.KEYS.HISTORY); },
+  clear() {
+    DS.store.remove(DS.KEYS.HISTORY);
+    DS.store.remove(DS.KEYS.FEEDBACK);
+  },
 };
 
 /* ---- Settings ---- */

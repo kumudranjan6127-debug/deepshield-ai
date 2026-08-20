@@ -29,7 +29,7 @@ BACKEND = ROOT / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from inference import analyze_file, engine_available, engine_info  # noqa: E402
+from inference import analyze_file, engine_available, engine_info
 
 EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
@@ -93,10 +93,15 @@ def human_summary(report):
 
     return "\n".join([
         "DeepShield model benchmark",
-        f"Model: {report['model'].get('model_name', 'unknown')} "
-        f"{report['model'].get('version', '')} ({report['model'].get('runtime', '')})".strip(),
-        f"Samples: {m['samples']} total; {m['evaluated']} conclusive; "
-        f"{m['inconclusive_no_face']} inconclusive/no-face; {m['errors']} errors",
+        (
+            f"Model: {report['model'].get('model_name', 'unknown')} "
+            f"{report['model'].get('version', '')} "
+            f"({report['model'].get('runtime', '')})"
+        ).strip(),
+        (
+            f"Samples: {m['samples']} total; {m['evaluated']} conclusive; "
+            f"{m['inconclusive_no_face']} inconclusive/no-face; {m['errors']} errors"
+        ),
         f"Confusion matrix: TP={m['tp']} TN={m['tn']} FP={m['fp']} FN={m['fn']}",
         f"Accuracy: {percent(m['accuracy'])}",
         f"Precision: {percent(m['precision'])}",
@@ -104,9 +109,11 @@ def human_summary(report):
         f"F1: {percent(m['f1'])}",
         f"False-positive rate: {percent(m['false_positive_rate'])}",
         f"False-negative rate: {percent(m['false_negative_rate'])}",
-        f"Latency (ms): mean={latency['mean'] if latency['mean'] is not None else 'n/a'} "
-        f"median={latency['median'] if latency['median'] is not None else 'n/a'} "
-        f"p95={latency['p95'] if latency['p95'] is not None else 'n/a'}",
+        (
+            f"Latency (ms): mean={latency['mean'] if latency['mean'] is not None else 'n/a'} "
+            f"median={latency['median'] if latency['median'] is not None else 'n/a'} "
+            f"p95={latency['p95'] if latency['p95'] is not None else 'n/a'}"
+        ),
         "",
         "Metrics exclude inconclusive/no-face samples and processing errors.",
         "Confidence is the current model's winning-class confidence, not calibrated probability.",
@@ -145,12 +152,14 @@ def main():
                 # Older current-engine responses report no face with
                 # `faceFound: false` but no explicit insufficient-evidence
                 # flag. Treat both forms identically in the benchmark.
-                "inconclusive": bool(result.get(
-                    "insufficientEvidence", not result.get("faceFound", False))),
+                "inconclusive": (
+                    bool(result.get("insufficientEvidence", False))
+                    or not bool(result.get("faceFound", False))
+                ),
                 "latency_ms": round(elapsed_ms, 2),
                 "error": "",
             })
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - one bad sample must not abort the run
             rows.append({
                 "file": str(path.relative_to(args.dataset)), "label": label,
                 "prediction": "", "confidence": "", "face_found": "",

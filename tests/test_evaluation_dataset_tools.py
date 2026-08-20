@@ -1,17 +1,20 @@
 """Tests for the provenance-first evaluation dataset tools."""
 import csv
+import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from PIL import Image
-
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
+from analyze_failures import analyze
 from check_dataset import format_report, inspect
-from dataset_common import METADATA_FIELDS, read_csv
+from dataset_common import METADATA_FIELDS, metadata_by_path, read_csv
 from dataset_manifest import build_manifest
 from summarize_benchmark import summarize
 
@@ -55,6 +58,7 @@ def test_manifest_uses_explicit_metadata_not_directory_labels(tmp_path):
 def test_checker_reports_duplicates_invalid_missing_metadata_and_identity_overlap(tmp_path):
     dataset = tmp_path / "dataset"
     _image(dataset / "real" / "original.png")
+    (dataset / "fake").mkdir()
     shutil.copyfile(dataset / "real" / "original.png", dataset / "fake" / "exact.png")
     _image(dataset / "fake" / "visual.jpg", fmt="JPEG")
     (dataset / "fake" / "broken.jpg").write_bytes(b"not an image")
@@ -78,7 +82,7 @@ def test_checker_reports_duplicates_invalid_missing_metadata_and_identity_overla
     assert report["duplicate_image_groups"]
     assert report["invalid_file_count"] == 1
     assert report["missing_metadata_count"] >= 2
-    assert report["missing_provenance_count"] == 1
+    assert report["missing_provenance_count"] == 2
     assert report["identity_overlap_status"] == "identity overlap detected"
     assert report["overlapping_identity_ids"] == ["overlap-id"]
     assert "DeepShield evaluation dataset quality report" in format_report(report)
@@ -109,3 +113,75 @@ def test_subgroup_report_keeps_face_swap_and_phone_metadata_separate():
     assert report["groups"]["all_samples"]["confusion_matrix"] == {"tp": 1, "tn": 1, "fp": 0, "fn": 1}
     assert report["groups"]["face_swap_samples"]["false_negative_rate"] == 1.0
     assert report["groups"]["real_phone_photo_samples"]["samples"] == 1
+
+
+def test_unsafe_metadata_paths_are_rejected_instead_of_rewritten(tmp_path):
+    metadata = tmp_path / "metadata.csv"
+    _write_metadata(metadata, [
+        _metadata("../real/sample.png"),
+        _metadata("/real/sample.png"),
+        _metadata("C:\\real\\sample.png"),
+    ])
+
+    index, errors = metadata_by_path(metadata)
+
+    assert index == {}
+    assert len(errors) == 3
+    assert all("unsafe relative_path" in error for error in errors)
+
+
+def test_manifest_rejects_symlinks_that_escape_dataset(tmp_path):
+    dataset = tmp_path / "dataset"
+    outside = tmp_path / "outside.png"
+    _image(outside)
+    dataset.mkdir()
+    link = dataset / "escape.png"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this platform")
+    _write_metadata(dataset / "metadata.csv", [_metadata("escape.png")])
+
+    rows, errors = build_manifest(
+        dataset, dataset / "metadata.csv", tmp_path / "manifest.csv"
+    )
+
+    assert rows == []
+    assert any("resolves outside dataset" in error for error in errors)
+
+
+def test_manifest_cli_fails_and_writes_machine_readable_errors(tmp_path):
+    dataset = tmp_path / "dataset"
+    _image(dataset / "real" / "sample.png")
+    _write_metadata(dataset / "metadata.csv", [_metadata("missing.png")])
+    output = tmp_path / "manifest.csv"
+
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "dataset_manifest.py"),
+         "--dataset", str(dataset), "--out", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+
+    assert completed.returncode == 2
+    assert output.is_file()
+    report = json.loads(
+        output.with_suffix(output.suffix + ".errors.json").read_text(encoding="utf-8")
+    )
+    assert report["ok"] is False
+    assert report["errors"]
+
+
+def test_inference_errors_are_not_misreported_as_no_face():
+    report = analyze(
+        [{
+            "file": "real/sample.png",
+            "prediction": "",
+            "confidence": "",
+            "face_found": "",
+            "inconclusive": "False",
+            "error": "RuntimeError: inference failed",
+        }],
+        [_metadata("real/sample.png")],
+    )
+
+    assert report["counts"]["no_face"] == 0

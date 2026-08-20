@@ -4,7 +4,7 @@ Ordering matters: each check is cheap relative to the one after it, so a
 hostile request is rejected as early as possible.
 
     upload:  size → extension → magic bytes → decoder → dimensions/duration
-    url:     scheme → DNS → address class → per-redirect re-check → download
+    url:     scheme → host policy → DNS → address class → per-redirect re-check → download
     traffic: rate limit → concurrency gate → analysis
 
 Nothing here imports the model; it only imports config and errors.
@@ -23,6 +23,23 @@ import errors
 from config import CFG
 
 log = logging.getLogger("deepshield")
+
+
+# Pages on these services are not direct media. The browser carries the same
+# names only to give an earlier friendly hint; this backend list is the
+# authoritative network boundary for API callers and redirect destinations.
+STREAMING_PLATFORM_HOSTS = (
+    "youtube.com", "youtu.be", "youtube-nocookie.com",
+    "instagram.com", "instagr.am",
+    "facebook.com", "fb.watch",
+    "tiktok.com",
+    "twitter.com", "x.com",
+    "reddit.com", "redd.it",
+    "vimeo.com",
+    "dailymotion.com", "dai.ly",
+    "snapchat.com",
+    "t.me", "telegram.me",
+)
 
 
 # =====================================================================
@@ -164,6 +181,12 @@ def _is_forbidden(ip: ipaddress._BaseAddress) -> str | None:
     return None
 
 
+def _is_streaming_platform_host(host: str) -> bool:
+    host = (host or "").lower().rstrip(".")
+    return any(host == root or host.endswith("." + root)
+               for root in STREAMING_PLATFORM_HOSTS)
+
+
 def resolve_public(host: str) -> list[str]:
     """Resolve a hostname and require that *every* answer is public.
 
@@ -205,7 +228,7 @@ def resolve_public(host: str) -> list[str]:
 
 
 def validate_url(url: str) -> str:
-    """Scheme and destination checks. Returns the normalised URL."""
+    """Scheme, media-host policy and destination checks."""
     if not url or len(url) > 2048:
         raise errors.blocked_url("URL missing or too long")
 
@@ -215,7 +238,14 @@ def validate_url(url: str) -> str:
     if parsed.scheme == "http" and not CFG.ALLOW_HTTP_URLS:
         raise errors.insecure_url()
 
-    resolved = resolve_public(parsed.hostname or "")
+    host = parsed.hostname or ""
+    if _is_streaming_platform_host(host):
+        raise errors.not_a_video(
+            "Streaming-platform page URLs are not direct video files. "
+            "Provide a direct video URL instead."
+        )
+
+    resolved = resolve_public(host)
     log.info("url allowed: %s -> %s", parsed.hostname, ",".join(resolved))
     return url
 
@@ -279,30 +309,57 @@ def safe_download(url: str, dest: str) -> int:
 # =====================================================================
 
 class RateLimiter:
-    """Sliding window per client. In-process, which matches a single
-    CPU-bound server; a multi-process deployment would need shared state."""
+    """Sliding window per client with bounded in-process bookkeeping.
 
-    def __init__(self, limit: int, window_seconds: int):
+    A one-off client key must not live forever after its window expires, and
+    a flood of fresh keys must not turn the limiter itself into a memory DoS.
+    When the real-client map is full, previously unseen callers share one
+    overflow bucket until old client windows can be swept."""
+
+    MAX_CLIENTS = 10_000
+    SWEEP_INTERVAL_SECONDS = 5.0
+
+    def __init__(self, limit: int, window_seconds: int, max_clients: int | None = None):
         self.limit = limit
         self.window = window_seconds
+        self.max_clients = max(1, int(max_clients or self.MAX_CLIENTS))
         self._hits = defaultdict(deque)
         self._lock = threading.Lock()
+        self._overflow_key = object()
+        self._next_sweep = 0.0
+
+    def _expire(self, hits: deque, now: float):
+        while hits and now - hits[0] > self.window:
+            hits.popleft()
+
+    def _sweep(self, now: float):
+        for key, hits in list(self._hits.items()):
+            self._expire(hits, now)
+            if not hits:
+                del self._hits[key]
+        self._next_sweep = now + min(
+            self.SWEEP_INTERVAL_SECONDS, max(1.0, float(self.window)))
 
     def check(self, key: str):
         now = time.monotonic()
         with self._lock:
-            hits = self._hits[key]
-            while hits and now - hits[0] > self.window:
-                hits.popleft()
+            # Sweep old clients when the table is at capacity. Until the next
+            # sweep is due, new one-off callers share an overflow bucket so
+            # the map cannot keep growing with attacker-controlled keys.
+            if len(self._hits) >= self.max_clients and now >= self._next_sweep:
+                self._sweep(now)
+
+            bucket_key = key
+            if key not in self._hits and len(self._hits) >= self.max_clients:
+                bucket_key = self._overflow_key
+
+            hits = self._hits[bucket_key]
+            self._expire(hits, now)
             if len(hits) >= self.limit:
                 retry = int(self.window - (now - hits[0])) + 1
                 log.warning("rate limit hit by %s", key)
                 raise errors.rate_limited(retry)
             hits.append(now)
-
-            if len(self._hits) > 10_000:       # bound the bookkeeping
-                for k in [k for k, v in self._hits.items() if not v]:
-                    del self._hits[k]
 
 
 # =====================================================================

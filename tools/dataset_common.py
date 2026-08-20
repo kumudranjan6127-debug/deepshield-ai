@@ -10,8 +10,7 @@ from __future__ import annotations
 import csv
 import hashlib
 from collections import Counter, defaultdict
-from pathlib import Path
-
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 MANIFEST_FIELDS = [
@@ -23,7 +22,13 @@ METADATA_FIELDS = MANIFEST_FIELDS[:9]
 
 
 def normalized_path(value: str) -> str:
-    return Path(str(value or "").replace("\\", "/")).as_posix().lstrip("./")
+    raw = str(value or "").strip().replace("\\", "/")
+    if not raw:
+        return ""
+    path = PurePosixPath(raw)
+    if path.is_absolute() or PureWindowsPath(raw).is_absolute() or ".." in path.parts:
+        raise ValueError(f"unsafe relative_path: {value}")
+    return path.as_posix()
 
 
 def sha256_of(path: Path) -> str:
@@ -56,7 +61,11 @@ def metadata_by_path(path: Path) -> tuple[dict[str, dict[str, str]], list[str]]:
     errors = [f"metadata missing column: {field}" for field in sorted(missing)]
     index: dict[str, dict[str, str]] = {}
     for number, row in enumerate(rows, start=2):
-        key = normalized_path(row.get("relative_path", ""))
+        try:
+            key = normalized_path(row.get("relative_path", ""))
+        except ValueError as exc:
+            errors.append(f"metadata row {number}: {exc}")
+            continue
         if not key:
             errors.append(f"metadata row {number}: missing relative_path")
         elif key in index:
@@ -76,7 +85,7 @@ def image_details(path: Path) -> tuple[int | str, int | str, str]:
         with Image.open(path) as image:
             width, height = image.size
         return width, height, ""
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - validation records decoder failures
         return "", "", f"invalid image: {type(exc).__name__}"
 
 

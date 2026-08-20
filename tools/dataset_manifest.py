@@ -8,16 +8,32 @@ and provenance must be entered explicitly in ``dataset/metadata.csv``.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
-from dataset_common import (IMAGE_EXTENSIONS, MANIFEST_FIELDS, image_details,
-                            metadata_by_path, normalized_path, sha256_of,
-                            write_csv)
+from dataset_common import (
+    IMAGE_EXTENSIONS,
+    MANIFEST_FIELDS,
+    image_details,
+    metadata_by_path,
+    normalized_path,
+    sha256_of,
+    write_csv,
+)
 
 
-def media_files(dataset: Path, excluded: set[Path]):
+def media_files(dataset: Path, excluded: set[Path], validation_errors: list[str]):
+    dataset_root = dataset.resolve()
     for path in sorted(dataset.rglob("*")):
-        if path.is_file() and path.resolve() not in excluded:
+        if not path.is_file():
+            continue
+        resolved = path.resolve()
+        if not resolved.is_relative_to(dataset_root):
+            validation_errors.append(
+                f"file resolves outside dataset: {path.relative_to(dataset)}"
+            )
+            continue
+        if resolved not in excluded:
             yield path
 
 
@@ -26,7 +42,7 @@ def build_manifest(dataset: Path, metadata_path: Path, output_path: Path):
     excluded = {metadata_path.resolve(), output_path.resolve()}
     rows = []
 
-    for path in media_files(dataset, excluded):
+    for path in media_files(dataset, excluded, metadata_errors):
         relative = normalized_path(path.relative_to(dataset))
         meta = metadata.get(relative, {})
         errors = []
@@ -95,6 +111,13 @@ def main():
         print("Metadata issues:")
         for error in errors:
             print(f"  - {error}")
+    error_report = args.out.with_suffix(args.out.suffix + ".errors.json")
+    error_report.write_text(
+        json.dumps({"ok": not errors, "errors": errors}, indent=2),
+        encoding="utf-8",
+    )
+    if errors:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

@@ -136,12 +136,18 @@ DS.glare = {
 DS.server = {
   _promise: null,
 
-  /* Cached — every caller shares the same request */
+  /* Share an in-flight/successful request, but do not permanently cache a
+     transient failure. A later action on the same page must be able to
+     retry the backend instead of silently switching modes forever. */
   health() {
     if (!DS.server._promise) {
       DS.server._promise = fetch('/api/health', { cache: 'no-store' })
         .then(r => (r.ok ? r.json() : null))
-        .catch(() => null); // frontend-only mode (npm run dev / file://)
+        .catch(() => null)
+        .then(result => {
+          if (!result) DS.server._promise = null;
+          return result;
+        });
     }
     return DS.server._promise;
   },

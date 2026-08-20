@@ -25,7 +25,10 @@ def analyze(predictions, manifest, high_confidence=90, low_confidence=70):
         except (TypeError, ValueError):
             confidence = None
         categories = []
-        if _bool(prediction.get("inconclusive")) or not _bool(prediction.get("face_found")):
+        if not prediction.get("error") and (
+            _bool(prediction.get("inconclusive"))
+            or not _bool(prediction.get("face_found"))
+        ):
             categories.append("no_face")
         if label == "real" and predicted == "deepfake":
             categories.append("false_positive")
@@ -63,7 +66,8 @@ def main():
     args.out_dir.mkdir(parents=True, exist_ok=True)
     with (args.out_dir / "failure_analysis.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.DictWriter(stream, fieldnames=FIELDS)
-        writer.writeheader(); writer.writerows(report["records"])
+        writer.writeheader()
+        writer.writerows(report["records"])
     (args.out_dir / "failure_analysis.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     text = "DeepShield failure analysis\n" + "\n".join(f"{key}: {value}" for key, value in report["counts"].items()) + "\n"
     (args.out_dir / "failure_analysis.txt").write_text(text, encoding="utf-8")

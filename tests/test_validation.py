@@ -70,10 +70,10 @@ def test_a_url_that_returns_a_web_page_is_refused(client, monkeypatch):
     Deliberately offline. An earlier version of this test posted a real
     youtube.com URL and took 21 seconds, because the backend has no
     streaming-platform blocklist — that guard lives in `upload.js` and only
-    protects the browser. An API caller reaches the network. See
-    KNOWN_ISSUES; here the download is stubbed so the check under test is
-    the one that runs after it."""
-    import security
+    protects the browser. An API caller reaches the network. The downloader
+    moved into `network.py` when connections became DNS-pinned, so this test
+    stubs that boundary rather than the old `security.safe_download` symbol."""
+    import network
 
     def fake_download(url, dest):
         page = b"<!DOCTYPE html><html><head><title>Video</title></head></html>"
@@ -81,7 +81,7 @@ def test_a_url_that_returns_a_web_page_is_refused(client, monkeypatch):
             f.write(page * 40)
         return len(page) * 40
 
-    monkeypatch.setattr(security, "safe_download", fake_download)
+    monkeypatch.setattr(network, "safe_download", fake_download)
     r = client.post("/api/analyze", json={
         "url": "https://example.com/watch?v=abc",
         "fileName": "clip.mp4", "fileType": "video"})

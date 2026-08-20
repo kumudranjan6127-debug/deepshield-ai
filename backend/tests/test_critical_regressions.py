@@ -1,0 +1,260 @@
+import os
+import socket
+import sys
+import threading
+import time
+import urllib.parse
+
+import pytest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import app as app_module
+import errors
+import network
+import security
+from config import CFG
+
+
+class _FakeResponse:
+    def __init__(self, chunks=(b"video",), status=200, headers=None):
+        self.status = status
+        self._chunks = list(chunks)
+        self._headers = {
+            "Content-Type": "video/mp4",
+            **(headers or {}),
+        }
+        self.closed = False
+
+    def getheader(self, name, default=None):
+        return self._headers.get(name, default)
+
+    def read(self, _size):
+        return self._chunks.pop(0) if self._chunks else b""
+
+    def close(self):
+        self.closed = True
+
+
+def _public_dns(*_args, **_kwargs):
+    return [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "",
+         ("93.184.216.34", 0))
+    ]
+
+
+def test_url_download_pins_socket_to_validated_ip(monkeypatch, tmp_path):
+    created = []
+    response = _FakeResponse(chunks=(b"abc",))
+
+    class FakeConnection:
+        def __init__(self, host, port=None, timeout=None):
+            self.host, self.port, self.timeout = host, port, timeout
+            self.headers = None
+            created.append(self)
+
+        def request(self, method, target, headers=None):
+            assert method == "GET"
+            assert target == "/clip.mp4"
+            self.headers = headers
+
+        def getresponse(self):
+            return response
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(CFG, "ALLOW_HTTP_URLS", True)
+    monkeypatch.setattr(security.socket, "getaddrinfo", _public_dns)
+    monkeypatch.setattr(network.http.client, "HTTPConnection", FakeConnection)
+
+    dest = tmp_path / "clip.mp4"
+    assert network.safe_download("http://example.com/clip.mp4", str(dest)) == 3
+    assert dest.read_bytes() == b"abc"
+    assert created[0].host == "93.184.216.34"
+    assert created[0].headers["Host"] == "example.com"
+
+
+def test_explicit_port_zero_is_rejected():
+    parts = urllib.parse.urlsplit("https://example.com:0/clip.mp4")
+    with pytest.raises(errors.ApiError) as exc:
+        network._port(parts)
+    assert exc.value.code == "BLOCKED_URL"
+
+
+def test_download_deadline_is_absolute():
+    with pytest.raises(errors.ApiError) as exc:
+        network._remaining(time.monotonic() - 0.001)
+    assert exc.value.code == "BLOCKED_URL"
+
+
+def test_dns_rebinding_to_loopback_is_rejected_before_connect(monkeypatch, tmp_path):
+    answers = iter([
+        [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))],
+        [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))],
+    ])
+    connections = []
+
+    def rebinding_dns(*_args, **_kwargs):
+        return next(answers)
+
+    class MustNotConnect:
+        def __init__(self, *args, **kwargs):
+            connections.append((args, kwargs))
+            raise AssertionError("private rebound address reached the connector")
+
+    monkeypatch.setattr(CFG, "ALLOW_HTTP_URLS", True)
+    monkeypatch.setattr(security.socket, "getaddrinfo", rebinding_dns)
+    monkeypatch.setattr(network.http.client, "HTTPConnection", MustNotConnect)
+
+    dest = tmp_path / "rebind.mp4"
+    with pytest.raises(errors.ApiError) as exc:
+        network.safe_download("http://rebind.example/clip.mp4", str(dest))
+
+    assert exc.value.code == "BLOCKED_URL"
+    assert connections == []
+    assert not dest.exists()
+
+
+def test_failed_download_removes_partial_file(monkeypatch, tmp_path):
+    response = _FakeResponse(chunks=(b"12345",))
+
+    class FakeConnection:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def request(self, *_args, **_kwargs):
+            pass
+
+        def getresponse(self):
+            return response
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(CFG, "ALLOW_HTTP_URLS", True)
+    monkeypatch.setattr(CFG, "MAX_URL_BYTES", 4)
+    monkeypatch.setattr(security.socket, "getaddrinfo", _public_dns)
+    monkeypatch.setattr(network.http.client, "HTTPConnection", FakeConnection)
+
+    dest = tmp_path / "partial.mp4"
+    with pytest.raises(errors.ApiError) as exc:
+        network.safe_download("http://example.com/clip.mp4", str(dest))
+
+    assert exc.value.code == "TOO_LARGE"
+    assert not dest.exists()
+
+
+def test_wsgi_housekeeping_starts_once(monkeypatch):
+    calls = {"cleanup": 0, "thread": 0}
+    done = threading.Event()
+
+    def cleanup():
+        calls["cleanup"] += 1
+        return 0
+
+    def start_thread():
+        calls["thread"] += 1
+        done.set()
+        return object()
+
+    monkeypatch.setattr(app_module.security, "cleanup_uploads", cleanup)
+    monkeypatch.setattr(app_module.security, "start_cleanup_thread", start_thread)
+    app_module._housekeeping_started = False
+
+    client = app_module.app.test_client()
+    try:
+        client.get("/definitely-missing-one")
+        client.get("/definitely-missing-two")
+        assert done.wait(timeout=1.0), "housekeeping worker did not run"
+        assert calls == {"cleanup": 1, "thread": 1}
+    finally:
+        # Do not let later tests start the real housekeeping thread.
+        app_module._housekeeping_started = True
+
+
+def test_housekeeping_failure_does_not_fail_request(monkeypatch):
+    done = threading.Event()
+
+    def cleanup():
+        done.set()
+        raise OSError("test cleanup failure")
+
+    monkeypatch.setattr(app_module.security, "cleanup_uploads", cleanup)
+    monkeypatch.setattr(app_module.security, "start_cleanup_thread", lambda: object())
+    app_module._housekeeping_started = False
+
+    try:
+        response = app_module.app.test_client().get("/api/health")
+        assert response.status_code == 200
+        assert done.wait(timeout=1.0)
+    finally:
+        app_module._housekeeping_started = True
+
+
+def test_feedback_writes_are_rate_limited(monkeypatch):
+    monkeypatch.setattr(app_module, "_housekeeping_started", True)
+    monkeypatch.setattr(app_module.limiter, "limit", 1)
+    monkeypatch.setattr(app_module.store, "record_feedback", lambda _entry: None)
+    app_module.limiter._hits.clear()
+
+    client = app_module.app.test_client()
+    first = client.post("/api/feedback", json={"agree": True})
+    second = client.post("/api/feedback", json={"agree": True})
+
+    try:
+        assert first.status_code == 200
+        assert second.status_code == 429
+        assert second.get_json()["error_code"] == "RATE_LIMITED"
+    finally:
+        app_module.limiter._hits.clear()
+
+
+def test_engine_lock_respects_queue_deadline():
+    app_module.engine_access_lock.acquire()
+    try:
+        with pytest.raises(errors.ApiError) as exc:
+            app_module._run_inference(
+                "x.jpg", "image", 1.0, deadline=time.monotonic()
+            )
+        assert exc.value.code == "BUSY"
+    finally:
+        app_module.engine_access_lock.release()
+
+
+def test_shared_inference_calls_are_serialized(monkeypatch):
+    state_lock = threading.Lock()
+    barrier = threading.Barrier(2)
+    active = 0
+    max_active = 0
+    failures = []
+
+    def fake_analyze(*_args):
+        nonlocal active, max_active
+        with state_lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.05)
+        with state_lock:
+            active -= 1
+        return {"prediction": "real", "confidence": 90, "framesAnalyzed": 1}
+
+    monkeypatch.setattr(app_module.inference, "analyze_file", fake_analyze)
+
+    def worker():
+        try:
+            barrier.wait(timeout=1.0)
+            app_module._run_inference("x.jpg", "image", 1.0)
+        except BaseException as exc:  # noqa: BLE001 - surface worker failures
+            failures.append(exc)
+
+    threads = [threading.Thread(target=worker, daemon=True) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=2.0)
+
+    assert all(not thread.is_alive() for thread in threads), \
+        "inference serialization test deadlocked"
+    assert failures == []
+    assert max_active == 1

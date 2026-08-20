@@ -10,8 +10,6 @@
 (function () {
   'use strict';
 
-  /* ============ PAGE-TYPE CONFIG ============ */
-
   const CONFIGS = {
     'upload-image': {
       kind: 'image',
@@ -31,28 +29,30 @@
     },
   };
 
-  const PREVIEW_MAX_W = 640;   // px — thumbnail width cap for previewDataUrl
-  const PREVIEW_QUALITY = 0.7; // JPEG quality for previewDataUrl
-  const UPLOAD_SIM_MS = 900;   // simulated upload duration
+  const PREVIEW_MAX_W = 640;
+  const PREVIEW_QUALITY = 0.7;
+  const UPLOAD_SIM_MS = 900;
 
-  /* ============ STATE ============ */
+  // Backend deliberately rejects >40 MP images to avoid a decompression/RAM
+  // spike on the small Render instance. Modern phones can produce 48/50/64 MP
+  // JPEGs that are still well under the 10 MB file-size limit, so prepare a
+  // safe analysis copy in the browser rather than rejecting a perfectly usable
+  // photo. The detector caps images to 1024 px internally anyway.
+  const MAX_UPLOAD_IMAGE_PIXELS = 36_000_000;
+  const MAX_UPLOAD_IMAGE_SIDE = 4096;
 
   let cfg = null;
   let els = {};
   let currentFile = null;
-  let objectUrl = null;       // blob URL backing the visible preview
-  let previewDataUrl = null;  // downscaled JPEG data URL (or null)
+  let objectUrl = null;
+  let previewDataUrl = null;
   let progressTimer = null;
-  let ready = false;          // simulated upload finished
-
-  /* ============ BOOT ============ */
+  let ready = false;
 
   document.addEventListener('DOMContentLoaded', () => {
     if (!DS.auth.guard()) return;
-
     cfg = CONFIGS[document.body.dataset.page];
     if (!cfg) return;
-
     cacheEls();
     bindUpload();
     if (cfg.kind === 'video') bindUrlForm();
@@ -65,8 +65,8 @@
       area: q('#upload-area'),
       input: q('#file-input'),
       previewCard: q('#preview-card'),
-      img: q('#preview-img'),          // image page only
-      video: q('#preview-video'),      // video page only
+      img: q('#preview-img'),
+      video: q('#preview-video'),
       metaName: q('#meta-name'),
       metaSize: q('#meta-size'),
       progressWrap: q('#progress-wrap'),
@@ -75,31 +75,26 @@
       readyLine: q('#preview-ready'),
       startBtn: q('#start-btn'),
       removeBtn: q('#remove-btn'),
-      urlForm: q('#url-form'),         // video page only
+      urlForm: q('#url-form'),
       urlField: q('#url-field'),
       urlInput: q('#url-input'),
-      urlHint: q('#url-hint'),         // streaming-platform guidance
+      urlHint: q('#url-hint'),
       urlHintName: q('#url-hint-name'),
     };
   }
 
-  /* ============ DROP ZONE / FILE PICKING ============ */
-
   function bindUpload() {
     const { area, input } = els;
 
-    // Whole area opens the picker (the Browse button's click bubbles here)
     area.addEventListener('click', e => {
-      if (e.target === input) return; // ignore the programmatic click echo
+      if (e.target === input) return;
       input.click();
     });
-
 
     input.addEventListener('change', () => {
       if (input.files && input.files[0]) handleFile(input.files[0]);
     });
 
-    // Drag & drop
     ['dragenter', 'dragover'].forEach(type =>
       area.addEventListener(type, e => {
         e.preventDefault();
@@ -114,7 +109,6 @@
       if (file) handleFile(file);
     });
 
-    // Preview actions
     els.startBtn.addEventListener('click', startAnalysis);
     els.removeBtn.addEventListener('click', resetState);
   }
@@ -130,14 +124,11 @@
     showPreview(file);
   }
 
-  /* ============ VALIDATION ============ */
-
   function fileExt(name) {
     const parts = String(name || '').split('.');
     return parts.length > 1 ? parts.pop().toLowerCase() : '';
   }
 
-  /** Returns an error message, or null when the file is acceptable. */
   function validateFile(file) {
     const mimeOk = cfg.accept.includes(String(file.type || '').toLowerCase());
     const extOk = cfg.exts.includes(fileExt(file.name));
@@ -146,14 +137,11 @@
     return null;
   }
 
-  /* ============ PREVIEW ============ */
-
   function showPreview(file) {
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(file);
     previewDataUrl = null;
 
-    // Media element + thumbnail capture (listeners first, then src)
     if (cfg.kind === 'image' && els.img) {
       els.img.addEventListener('load', () => {
         previewDataUrl = makePreviewDataUrl(els.img, els.img.naturalWidth, els.img.naturalHeight);
@@ -161,34 +149,25 @@
       els.img.src = objectUrl;
     } else if (els.video) {
       els.video.addEventListener('loadeddata', () => {
-        // Fallback capture at frame 0, then a cleaner grab just past it
         previewDataUrl = makePreviewDataUrl(els.video, els.video.videoWidth, els.video.videoHeight);
         els.video.addEventListener('seeked', () => {
           const dataUrl = makePreviewDataUrl(els.video, els.video.videoWidth, els.video.videoHeight);
           if (dataUrl) previewDataUrl = dataUrl;
         }, { once: true });
-        try { els.video.currentTime = 0.1; } catch { /* non-seekable — keep frame 0 */ }
+        try { els.video.currentTime = 0.1; } catch { /* non-seekable */ }
       }, { once: true });
       els.video.src = objectUrl;
     }
 
-    // Meta row
     els.metaName.textContent = file.name;
     els.metaName.title = file.name;
     els.metaSize.textContent = DS.util.formatBytes(file.size);
 
-    // Swap cards
     els.uploadCard.hidden = true;
     els.previewCard.hidden = false;
-
     runProgress();
   }
 
-  /**
-   * Draw a media element to a canvas, downscaled to PREVIEW_MAX_W,
-   * and return a JPEG data URL. Returns null when the canvas is
-   * tainted (file:// edge cases) or dimensions are unavailable.
-   */
   function makePreviewDataUrl(source, width, height) {
     try {
       if (!width || !height) return null;
@@ -202,8 +181,6 @@
       return null;
     }
   }
-
-  /* ============ SIMULATED UPLOAD PROGRESS ============ */
 
   function runProgress() {
     clearInterval(progressTimer);
@@ -230,8 +207,6 @@
     }, 40);
   }
 
-  /* ============ RESET ============ */
-
   function resetState() {
     clearInterval(progressTimer);
     progressTimer = null;
@@ -256,15 +231,81 @@
     els.readyLine.hidden = true;
     els.progressWrap.hidden = false;
     els.startBtn.disabled = true;
-
     els.previewCard.hidden = true;
     els.uploadCard.hidden = false;
   }
 
-  /* ============ HANDOFF → PROCESSING ============ */
+  function safeMultipartName(original, uploadFile) {
+    const type = String(uploadFile.type || original.type || '').toLowerCase();
+    const extByMime = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'video/mp4': 'mp4',
+      'video/webm': 'webm',
+      'video/quicktime': 'mov',
+    };
+    const wanted = extByMime[type];
+    const ext = fileExt(original.name);
+    if (!wanted || cfg.exts.includes(ext)) return original.name || `upload.${wanted || 'bin'}`;
+    const base = String(original.name || 'upload').replace(/\.[^.]*$/, '') || 'upload';
+    return `${base}.${wanted}`;
+  }
+
+  function prepareFileForUpload(file) {
+    if (cfg.kind !== 'image' || !els.img || !els.img.complete) {
+      return Promise.resolve({ file, optimized: false });
+    }
+
+    const width = els.img.naturalWidth;
+    const height = els.img.naturalHeight;
+    if (!width || !height) return Promise.resolve({ file, optimized: false });
+
+    const pixels = width * height;
+    if (pixels <= MAX_UPLOAD_IMAGE_PIXELS && Math.max(width, height) <= MAX_UPLOAD_IMAGE_SIDE) {
+      return Promise.resolve({ file, optimized: false });
+    }
+
+    const scale = Math.min(
+      1,
+      MAX_UPLOAD_IMAGE_SIDE / Math.max(width, height),
+      Math.sqrt(MAX_UPLOAD_IMAGE_PIXELS / pixels),
+    );
+    const outW = Math.max(1, Math.floor(width * scale));
+    const outH = Math.max(1, Math.floor(height * scale));
+
+    return new Promise(resolve => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = outW;
+        canvas.height = outH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve({ file, optimized: false }); return; }
+        ctx.drawImage(els.img, 0, 0, outW, outH);
+        canvas.toBlob(blob => {
+          if (!blob) { resolve({ file, optimized: false }); return; }
+          const base = String(file.name || 'photo').replace(/\.[^.]*$/, '') || 'photo';
+          const optimized = new File([blob], `${base}.jpg`, {
+            type: 'image/jpeg',
+            lastModified: file.lastModified || Date.now(),
+          });
+          resolve({ file: optimized, optimized: true });
+        }, 'image/jpeg', 0.90);
+      } catch {
+        resolve({ file, optimized: false });
+      }
+    });
+  }
 
   async function startAnalysis() {
     if (!currentFile || !ready) return;
+
+    const mode = await DS.api.resolveMode();
+    if (mode === 'unavailable') {
+      DS.toast('The analysis server is unavailable. No simulated verdict was generated.', 'error');
+      return;
+    }
+
     const scan = {
       id: DS.util.uid(),
       fileName: currentFile.name,
@@ -275,22 +316,49 @@
       createdAt: new Date().toISOString(),
     };
 
-    // Live engine: a File object can't survive page navigation, so stage
-    // it on the server now; processing.html analyzes it via uploadId.
-    // Without a backend we skip this and the mock engine takes over.
-    if (await DS.api.resolveMode() === 'live') {
+    if (mode === 'live') {
       const originalLabel = els.startBtn.innerHTML;
       els.startBtn.disabled = true;
       els.removeBtn.disabled = true;
-      els.startBtn.innerHTML = '<span class="loader" aria-hidden="true"></span> Uploading…';
+      els.startBtn.innerHTML = '<span class="loader" aria-hidden="true"></span> Preparing…';
+
       try {
+        const prepared = await prepareFileForUpload(currentFile);
+        const uploadFile = prepared.file;
+        if (prepared.optimized) {
+          els.startBtn.innerHTML = '<span class="loader" aria-hidden="true"></span> Optimizing photo…';
+        }
+
         const fd = new FormData();
-        fd.append('file', currentFile);
+        fd.append('file', uploadFile, safeMultipartName(currentFile, uploadFile));
+        els.startBtn.innerHTML = '<span class="loader" aria-hidden="true"></span> Uploading…';
+
         const res = await fetch('/api/upload', { method: 'POST', body: fd });
-        if (!res.ok) throw new Error();
-        scan.uploadId = (await res.json()).uploadId;
-      } catch {
-        DS.toast('Could not reach the analysis server — is the backend running?', 'error');
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const failure = new Error(payload.error || `Upload failed (${res.status})`);
+          failure.code = payload.error_code || null;
+          failure.status = res.status;
+          throw failure;
+        }
+        if (!payload.uploadId) {
+          const failure = new Error('The server accepted the upload but did not return an upload ID.');
+          failure.code = 'BAD_UPLOAD_RESPONSE';
+          throw failure;
+        }
+        scan.uploadId = payload.uploadId;
+        scan.uploadOptimized = prepared.optimized;
+      } catch (error) {
+        const code = error && error.code;
+        let message = (error && error.message) || 'Could not reach the analysis server.';
+        if (!code && (!error || error.name === 'TypeError')) {
+          message = 'Could not reach the analysis server. Check your connection and try again.';
+        } else if (code === 'IMAGE_TOO_LARGE') {
+          message = 'This photo is too large for the server. Try a normal camera photo instead of 48/50/64 MP mode.';
+        } else if (code === 'RATE_LIMITED') {
+          message = error.message || 'Too many attempts. Wait a moment and try again.';
+        }
+        DS.toast(message, 'error', code ? { title: code } : {});
         els.startBtn.disabled = false;
         els.removeBtn.disabled = false;
         els.startBtn.innerHTML = originalLabel;
@@ -303,8 +371,6 @@
     window.location.href = 'processing.html';
   }
 
-  /* ============ ANALYZE FROM URL (video page only) ============ */
-
   function bindUrlForm() {
     if (!els.urlForm) return;
 
@@ -314,10 +380,6 @@
     els.urlForm.addEventListener('submit', e => {
       e.preventDefault();
       const raw = els.urlInput.value.trim();
-
-      // Streaming pages serve players, not files — and their re-encoding
-      // destroys the artefacts detection depends on. Say so, and offer
-      // the screen-recording route instead of a bare "invalid link".
       const platform = streamingPlatform(raw);
       if (platform) {
         showUrlHint(platform);
@@ -338,7 +400,7 @@
         fileType: 'video',
         fileSize: null,
         source: 'url',
-        sourceUrl: els.urlInput.value.trim(), // live engine downloads from here
+        sourceUrl: els.urlInput.value.trim(),
         previewDataUrl: null,
         createdAt: new Date().toISOString(),
       };
@@ -347,21 +409,19 @@
     });
   }
 
-  /* Streaming platforms we recognise, so the hint can name them. */
   const PLATFORMS = [
-    { name: 'YouTube',   hosts: ['youtube.com', 'youtu.be', 'youtube-nocookie.com'] },
+    { name: 'YouTube', hosts: ['youtube.com', 'youtu.be', 'youtube-nocookie.com'] },
     { name: 'Instagram', hosts: ['instagram.com', 'instagr.am'] },
-    { name: 'Facebook',  hosts: ['facebook.com', 'fb.watch'] },
-    { name: 'TikTok',    hosts: ['tiktok.com'] },
+    { name: 'Facebook', hosts: ['facebook.com', 'fb.watch'] },
+    { name: 'TikTok', hosts: ['tiktok.com'] },
     { name: 'X (Twitter)', hosts: ['twitter.com', 'x.com'] },
-    { name: 'Reddit',    hosts: ['reddit.com', 'redd.it'] },
-    { name: 'Vimeo',     hosts: ['vimeo.com'] },
+    { name: 'Reddit', hosts: ['reddit.com', 'redd.it'] },
+    { name: 'Vimeo', hosts: ['vimeo.com'] },
     { name: 'Dailymotion', hosts: ['dailymotion.com', 'dai.ly'] },
-    { name: 'Snapchat',  hosts: ['snapchat.com'] },
-    { name: 'Telegram',  hosts: ['t.me', 'telegram.me'] },
+    { name: 'Snapchat', hosts: ['snapchat.com'] },
+    { name: 'Telegram', hosts: ['t.me', 'telegram.me'] },
   ];
 
-  /** → platform name when the URL points at a streaming page, else null. */
   function streamingPlatform(raw) {
     if (!raw) return null;
     let host;
@@ -384,7 +444,6 @@
     if (els.urlHint) els.urlHint.hidden = true;
   }
 
-  /** Accepts http(s) URLs whose path ends in .mp4 (query strings OK). */
   function parseVideoUrl(raw) {
     if (!raw) return null;
     let url;

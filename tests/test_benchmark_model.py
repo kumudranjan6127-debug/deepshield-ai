@@ -1,7 +1,7 @@
 """Unit tests for the standalone objective benchmark runner."""
+import csv
 import importlib.util
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -46,3 +46,33 @@ def test_empty_metrics_are_unknown_not_fabricated():
     assert result["accuracy"] is None
     assert result["precision"] is None
     assert result["false_positive_rate"] is None
+
+
+def test_no_face_is_inconclusive_even_with_explicit_false_flag(monkeypatch, tmp_path):
+    sample = tmp_path / "dataset" / "real" / "sample.png"
+    sample.parent.mkdir(parents=True)
+    sample.write_bytes(b"fixture")
+
+    monkeypatch.setattr(benchmark_model, "engine_available", lambda: True)
+    monkeypatch.setattr(benchmark_model, "engine_info", lambda: {"model_name": "test"})
+    monkeypatch.setattr(
+        benchmark_model,
+        "analyze_file",
+        lambda *_args: {
+            "prediction": "real",
+            "confidence": 50,
+            "faceFound": False,
+            "insufficientEvidence": False,
+        },
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["benchmark_model.py", "--dataset", str(tmp_path / "dataset"),
+         "--out", str(tmp_path / "out")],
+    )
+
+    benchmark_model.main()
+
+    with (tmp_path / "out" / "predictions.csv").open(encoding="utf-8") as stream:
+        predictions = list(csv.DictReader(stream))
+    assert predictions[0]["inconclusive"] == "True"

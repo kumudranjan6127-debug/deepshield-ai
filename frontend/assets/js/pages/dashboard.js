@@ -18,11 +18,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* ---- Stats + recent scans ---- */
   const history = DS.history.all();
+  const decided = history.filter(s => !isInconclusive(s));
 
-  const fakes = history.filter(s => s.prediction === 'deepfake').length;
-  const reals = history.filter(s => s.prediction === 'real').length;
-  const avgConf = history.length
-    ? Math.round(history.reduce((sum, s) => sum + (s.confidence || 0), 0) / history.length)
+  const fakes = decided.filter(s => s.prediction === 'deepfake').length;
+  const reals = decided.filter(s => s.prediction === 'real').length;
+  const avgConf = decided.length
+    ? Math.round(decided.reduce((sum, s) => sum + (s.confidence || 0), 0) / decided.length)
     : null;
 
   animateCount(document.getElementById('stat-total'), history.length);
@@ -37,10 +38,14 @@ document.addEventListener('DOMContentLoaded', () => {
   renderFeedbackStat();
 });
 
+function isInconclusive(scan) {
+  return Boolean(scan && (scan.insufficientEvidence === true || scan.faceFound === false));
+}
+
 /* Real-world accuracy as rated by the user (from result-page feedback) */
 function renderFeedbackStat() {
   // Skipped ("not sure") entries carry no verdict — they must not count
-  const fb = DS.store.get('ds_feedback', []).filter(f => typeof f.agree === 'boolean');
+  const fb = DS.store.get(DS.KEYS.FEEDBACK, []).filter(f => typeof f.agree === 'boolean');
   if (!fb.length) return;
   const correct = fb.filter(f => f.agree).length;
   document.getElementById('fb-val').textContent =
@@ -77,17 +82,22 @@ function renderRecent(history) {
   }
 
   const rows = history.slice(0, 6).map(scan => {
+    const inconclusive = isInconclusive(scan);
     const isFake = scan.prediction === 'deepfake';
+    const badgeClass = inconclusive ? 'badge-warning'
+      : (isFake ? 'badge-danger' : 'badge-success');
+    const verdict = inconclusive ? 'Inconclusive'
+      : (isFake ? 'Likely Deepfake' : 'Likely Real');
     return `
       <tr>
         <td title="${DS.util.escapeHtml(scan.fileName)}">${DS.util.truncate(DS.util.escapeHtml(scan.fileName), 28)}</td>
         <td>${scan.fileType === 'video' ? 'Video' : 'Image'}</td>
         <td>
-          <span class="badge ${isFake ? 'badge-danger' : 'badge-success'}">
-            <span class="badge-dot"></span>${isFake ? 'Likely Deepfake' : 'Likely Real'}
+          <span class="badge ${badgeClass}">
+            <span class="badge-dot"></span>${verdict}
           </span>
         </td>
-        <td class="mono">${scan.confidence}%</td>
+        <td class="mono">${inconclusive ? '—' : `${scan.confidence}%`}</td>
         <td>${DS.util.formatDate(scan.completedAt)}</td>
         <td>
           <a class="btn btn-ghost btn-sm" href="report.html?id=${encodeURIComponent(scan.id)}">Report</a>
