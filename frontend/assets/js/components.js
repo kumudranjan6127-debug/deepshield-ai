@@ -33,16 +33,31 @@ DS.toast = function toast(message, type = 'info', opts = {}) {
   const el = document.createElement('div');
   el.className = `toast toast-${type}`;
   el.setAttribute('role', 'status');
-  el.innerHTML = `
-    <i data-lucide="${iconName}" class="icon"></i>
-    <div>
-      ${title ? `<div class="toast-title">${title}</div>` : ''}
-      <div>${message}</div>
-    </div>
-    <button class="toast-close" aria-label="Dismiss">
-      <i data-lucide="x" class="icon-sm"></i>
-    </button>
-  `;
+
+  const icon = document.createElement('i');
+  icon.className = 'icon';
+  icon.setAttribute('data-lucide', iconName);
+
+  const copy = document.createElement('div');
+  if (title) {
+    const heading = document.createElement('div');
+    heading.className = 'toast-title';
+    heading.textContent = String(title);
+    copy.appendChild(heading);
+  }
+  const body = document.createElement('div');
+  body.textContent = String(message);
+  copy.appendChild(body);
+
+  const close = document.createElement('button');
+  close.className = 'toast-close';
+  close.setAttribute('aria-label', 'Dismiss');
+  const closeIcon = document.createElement('i');
+  closeIcon.className = 'icon-sm';
+  closeIcon.setAttribute('data-lucide', 'x');
+  close.appendChild(closeIcon);
+
+  el.append(icon, copy, close);
   container.appendChild(el);
   DS.icons();
 
@@ -50,7 +65,7 @@ DS.toast = function toast(message, type = 'info', opts = {}) {
     el.classList.add('leaving');
     el.addEventListener('animationend', () => el.remove(), { once: true });
   };
-  el.querySelector('.toast-close').addEventListener('click', dismiss);
+  close.addEventListener('click', dismiss);
   if (duration > 0) setTimeout(dismiss, duration);
   return el;
 };
@@ -154,7 +169,11 @@ DS.server = {
 
   async hydrate() {
     const health = await DS.server.health();
-    if (!health) return; // no backend — neutral placeholders stay
+    if (!health) {
+      DS.util.qsa('[data-engine-badge]').forEach(el =>
+        DS.server.paintBadge(el, 'unavailable'));
+      return;
+    }
 
     // The server reports what it actually loaded; the browser never maps
     // an architecture to a name itself.
@@ -171,8 +190,11 @@ DS.server = {
     fill('data-model-accuracy',
          health.test_accuracy != null ? `${health.test_accuracy}%` : '—');
 
+    const engine = health.engine === 'live' ? 'live'
+      : ((health.engine === 'echo' || health.engine === 'simulated')
+        ? 'simulated' : 'unavailable');
     DS.util.qsa('[data-engine-badge]').forEach(el =>
-      DS.server.paintBadge(el, health.engine === 'live' ? 'live' : 'simulated'));
+      DS.server.paintBadge(el, engine));
 
     document.dispatchEvent(new CustomEvent('ds:server-ready', { detail: health }));
   },
@@ -187,13 +209,18 @@ DS.server = {
   paintBadge(el, engine) {
     if (!el) return;
     const live = engine === 'live';
+    const simulated = engine === 'simulated' || engine === 'echo';
     el.className = `badge ${live ? 'badge-success' : 'badge-warning'} engine-badge`;
-    el.title = live
-      ? 'A trained model analysed this media.'
-      : 'No model analysed this media — this is a demonstration verdict.';
-    el.innerHTML = live
-      ? '<span class="badge-dot pulse"></span>Live model'
-      : '<i data-lucide="flask-conical" class="icon-sm"></i>Simulated — demo only';
+    if (live) {
+      el.title = 'A trained model analysed this media.';
+      el.innerHTML = '<span class="badge-dot pulse"></span>Live model';
+    } else if (simulated) {
+      el.title = 'No model analysed this media — this is a demonstration verdict.';
+      el.innerHTML = '<i data-lucide="flask-conical" class="icon-sm"></i>Simulated — demo only';
+    } else {
+      el.title = 'The analysis backend or model is unavailable. No verdict can be generated.';
+      el.innerHTML = '<i data-lucide="circle-alert" class="icon-sm"></i>Model unavailable';
+    }
     DS.icons();
   },
 };

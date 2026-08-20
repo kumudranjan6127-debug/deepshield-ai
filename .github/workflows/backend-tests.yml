@@ -2,7 +2,7 @@ name: Backend tests
 
 on:
   push:
-    branches: [main, 'fix/**', 'agent/**']
+    branches: [main, 'fix/**', 'agent/**', 'codex/**']
   pull_request:
     branches: [main]
 
@@ -14,11 +14,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Install test/runtime dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest
-      - name: Compile backend
-        run: python -m compileall -q backend
+      - name: Compile Python sources
+        run: python -m compileall -q backend scripts tools training
+      - name: Check JavaScript syntax
+        run: |
+          find frontend -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check serve.js
+          node --check scripts/ds.js
       - name: Run repository tests
         run: python -m pytest -q tests backend/tests

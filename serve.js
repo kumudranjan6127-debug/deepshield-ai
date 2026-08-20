@@ -25,6 +25,12 @@ const MIME = {
   '.mp4': 'video/mp4',
 };
 
+const TEXT_HEADERS = {
+  'Content-Type': 'text/plain; charset=utf-8',
+  'Cache-Control': 'no-store',
+  'X-Content-Type-Options': 'nosniff',
+};
+
 const DEMO_HEALTH = {
   ok: true,
   status: 'healthy',
@@ -56,6 +62,7 @@ http.createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
     });
     return res.end(body);
   }
@@ -65,7 +72,7 @@ http.createServer((req, res) => {
     urlPath = decodeURIComponent(rawPath);
   } catch (err) {
     if (err instanceof URIError) {
-      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.writeHead(400, TEXT_HEADERS);
       return res.end('400 Bad Request');
     }
     throw err;
@@ -74,26 +81,28 @@ http.createServer((req, res) => {
   // Modern Node rejects NUL bytes in filesystem paths. Reject them at the
   // HTTP boundary so malformed input cannot escape the normal error flow.
   if (urlPath.includes('\0')) {
-    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.writeHead(400, TEXT_HEADERS);
     return res.end('400 Bad Request');
   }
 
   if (urlPath === '/') urlPath = '/landing.html';
 
-  const filePath = path.join(ROOT, path.normalize(urlPath));
-  if (!filePath.startsWith(ROOT)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+  const filePath = path.resolve(ROOT, `.${urlPath}`);
+  const insideRoot = filePath === ROOT || filePath.startsWith(`${ROOT}${path.sep}`);
+  if (!insideRoot) {
+    res.writeHead(403, TEXT_HEADERS);
     return res.end('Forbidden');
   }
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.writeHead(404, TEXT_HEADERS);
       return res.end('404 Not Found: ' + urlPath);
     }
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
       'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
     });
     res.end(data);
   });

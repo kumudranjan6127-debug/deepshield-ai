@@ -21,6 +21,30 @@ from werkzeug.exceptions import HTTPException
 log = logging.getLogger("deepshield")
 
 
+def safe_log_text(value, limit: int = 500) -> str:
+    """Return one bounded log line even when *value* came from a request."""
+    text = str(value)
+    escaped = []
+    escaped_length = 0
+    for char in text:
+        codepoint = ord(char)
+        if char == "\r":
+            replacement = r"\r"
+        elif char == "\n":
+            replacement = r"\n"
+        elif char == "\t":
+            replacement = r"\t"
+        elif codepoint < 32 or codepoint == 127:
+            replacement = f"\\x{codepoint:02x}"
+        else:
+            replacement = char
+        escaped.append(replacement)
+        escaped_length += len(replacement)
+        if escaped_length >= limit:
+            break
+    return "".join(escaped)[:limit]
+
+
 class ApiError(Exception):
     """A failure the caller can act on. `code` is stable, `message` is human."""
 
@@ -115,7 +139,7 @@ def insecure_url():
 def blocked_url(reason: str):
     # Deliberately vague to the caller, precise in the log: probing for
     # internal hosts should not get a useful answer back.
-    log.warning("blocked url: %s", reason)
+    log.warning("blocked url: %s", safe_log_text(reason))
     return ApiError("BLOCKED_URL", "That URL cannot be fetched")
 
 
@@ -141,7 +165,8 @@ def register(app):
 
     @app.errorhandler(ApiError)
     def _api_error(e: ApiError):
-        log.info("%s %s -> %s: %s", request.method, request.path, e.code, e.message)
+        log.info("%s %s -> %s: %s", request.method,
+                 safe_log_text(request.path), e.code, safe_log_text(e.message))
         response = jsonify(e.payload())
         if getattr(e, "retry_after", None):
             response.headers["Retry-After"] = str(e.retry_after)
@@ -153,7 +178,8 @@ def register(app):
         # no frames). A 400 is the honest answer, not a 500.
         if not _is_api():
             raise e
-        log.info("%s %s -> INVALID_INPUT: %s", request.method, request.path, e)
+        log.info("%s %s -> INVALID_INPUT: %s", request.method,
+                 safe_log_text(request.path), safe_log_text(e))
         return jsonify(ApiError("INVALID_INPUT", str(e)).payload()), 400
 
     @app.errorhandler(HTTPException)
@@ -181,7 +207,8 @@ def register(app):
         # ties their report to the traceback in the log.
         from flask import g
         incident = getattr(g, "request_id", None) or "unknown"
-        log.exception("%s %s failed [%s]", request.method, request.path, incident,
+        log.exception("%s %s failed [%s]", request.method,
+                      safe_log_text(request.path), incident,
                       extra={"request_id": incident})
         payload = ApiError("INTERNAL",
                            "Something went wrong on the server", 500).payload()
