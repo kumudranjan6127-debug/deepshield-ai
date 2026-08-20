@@ -32,6 +32,11 @@ services:
         value: "1"
       - key: DS_FORCE_HTTPS
         value: "1"
+      # The GitHub Pages build is frontend-only. Allow that one exact origin
+      # to call the live Render API; same-origin localhost/Render requests do
+      # not need CORS and no wildcard is used.
+      - key: DS_CORS_ORIGINS
+        value: "https://kumudranjan6127-debug.github.io"
       # 5/min is two scans a minute once upload and analyze are counted -
       # too tight for someone trying the demo. Still protective.
       - key: DS_RATE_LIMIT
