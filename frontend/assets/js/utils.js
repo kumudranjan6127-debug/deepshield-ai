@@ -6,6 +6,33 @@
 
 window.DS = window.DS || {};
 
+/* ---- Deployment-aware API bridge ----
+   The Flask app serves /api/* on localhost and Render. GitHub Pages is
+   frontend-only, so relative /api/* requests would otherwise hit GitHub
+   Pages and fail before a selected local file ever reaches the model.
+
+   Rewrite only DeepShield API calls when the UI is running on this repo's
+   GitHub Pages origin. Every other fetch stays untouched. */
+DS.API_BASES = {
+  'kumudranjan6127-debug.github.io': 'https://deepshield-nque.onrender.com',
+};
+DS.API_BASE = DS.API_BASES[String(window.location.hostname || '').toLowerCase()] || '';
+DS.apiUrl = function apiUrl(path) {
+  const value = String(path || '');
+  if (!DS.API_BASE || !value.startsWith('/api/')) return value;
+  return DS.API_BASE + value;
+};
+
+if (DS.API_BASE && typeof window.fetch === 'function') {
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = function deepshieldFetch(input, init) {
+    if (typeof input === 'string' && input.startsWith('/api/')) {
+      return nativeFetch(DS.apiUrl(input), init);
+    }
+    return nativeFetch(input, init);
+  };
+}
+
 /* ---- Storage keys (single source of truth) ---- */
 DS.KEYS = {
   USER: 'ds_user',         // localStorage  {name, email, loggedInAt}
