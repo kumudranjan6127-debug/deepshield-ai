@@ -4,7 +4,6 @@ import os
 import shutil
 import socket
 import subprocess
-import sys
 import time
 
 import pytest
@@ -18,7 +17,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node is not installed")
 def run_node(source):
     completed = subprocess.run(
         [NODE, "-e", source], cwd=ROOT, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10,
+        capture_output=True, timeout=10, check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
@@ -94,6 +93,72 @@ eval(fs.readFileSync('frontend/assets/js/components.js', 'utf8'));
     run_node(script)
 
 
+def test_toasts_render_untrusted_text_without_html_and_unavailable_is_distinct():
+    script = r"""
+const fs = require('fs');
+
+class Element {
+  constructor(tag = 'div') {
+    this.tag = tag;
+    this.children = [];
+    this.attributes = {};
+    this.className = '';
+    this.innerHTML = '';
+    this.textContent = '';
+    this.classList = { add(){} };
+  }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  appendChild(child) { this.children.push(child); return child; }
+  append(...children) { this.children.push(...children); }
+  addEventListener() {}
+  remove() {}
+  querySelector() { return null; }
+}
+
+let toastContainer = null;
+global.window = { matchMedia: () => ({ matches: false }) };
+global.document = {
+  querySelector: selector => selector === '.toast-container' ? toastContainer : null,
+  querySelectorAll: () => [],
+  createElement: tag => new Element(tag),
+  body: { appendChild(el) { if (el.className === 'toast-container') toastContainer = el; } },
+  documentElement: { dataset: {} },
+  addEventListener() {},
+  dispatchEvent() {},
+  getElementById() { return null; },
+};
+global.CustomEvent = function(){};
+global.DS = {
+  util: { qsa: () => [] },
+  api: { MODEL: {}, CERTAINTY: [] },
+  auth: { user: () => null, logout(){} },
+};
+
+eval(fs.readFileSync('frontend/assets/js/components.js', 'utf8'));
+
+const payload = '<img src=x onerror=alert(1)>';
+const title = '<svg onload=alert(2)>';
+const toast = DS.toast(payload, 'error', { title, duration: 0 });
+const copy = toast.children[1];
+if (copy.children[0].textContent !== title || copy.children[1].textContent !== payload) {
+  throw new Error('toast did not preserve untrusted input as literal text');
+}
+if (toast.innerHTML.includes(payload) || toast.innerHTML.includes(title)) {
+  throw new Error('untrusted toast input reached innerHTML');
+}
+
+const badge = new Element();
+DS.server.paintBadge(badge, 'unavailable');
+if (!badge.innerHTML.includes('Model unavailable')) {
+  throw new Error('unavailable model was not labelled distinctly');
+}
+if (badge.innerHTML.includes('Simulated')) {
+  throw new Error('unavailable model was presented as simulated');
+}
+"""
+    run_node(script)
+
+
 def test_static_server_handles_bad_encoding_and_advertises_demo_mode():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -121,6 +186,7 @@ def test_static_server_handles_bad_encoding_and_advertises_demo_mode():
                 time.sleep(0.05)
 
         assert payload["engine"] == "echo"
+        assert response.getheader("X-Content-Type-Options") == "nosniff"
 
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
         conn.request("GET", "/%")
@@ -128,6 +194,23 @@ def test_static_server_handles_bad_encoding_and_advertises_demo_mode():
         bad.read()
         conn.close()
         assert bad.status == 400
+        assert bad.getheader("X-Content-Type-Options") == "nosniff"
+
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+        conn.request("GET", "/%00")
+        nul = conn.getresponse()
+        nul.read()
+        conn.close()
+        assert nul.status == 400
+        assert nul.getheader("X-Content-Type-Options") == "nosniff"
+
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+        conn.request("GET", "/%2e%2e/%2e%2e/package.json")
+        traversal = conn.getresponse()
+        traversal.read()
+        conn.close()
+        assert traversal.status == 403
+        assert traversal.getheader("X-Content-Type-Options") == "nosniff"
 
         # The malformed request must not terminate the server.
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
@@ -145,3 +228,11 @@ def test_static_server_handles_bad_encoding_and_advertises_demo_mode():
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=3)
+
+
+def test_process_controller_uses_argument_arrays_instead_of_shell_commands():
+    with open(os.path.join(ROOT, "scripts", "ds.js"), encoding="utf-8") as file:
+        source = file.read()
+    assert "execSync" not in source
+    assert "execFileSync" in source
+    assert "'powershell.exe', ['-NoProfile', '-Command', script]" in source

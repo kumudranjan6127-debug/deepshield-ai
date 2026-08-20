@@ -24,14 +24,13 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from flask import Flask, g, jsonify, redirect, request, send_from_directory
-
 import errors
 import inference
 import network
 import security
 import store
 from config import CFG
+from flask import Flask, g, jsonify, redirect, request, send_from_directory
 
 log = logging.getLogger("deepshield")
 
@@ -179,7 +178,8 @@ def tag_request():
 def log_api_call(response):
     """One line per API call, with the timing already measured."""
     if request.path.startswith("/api/") and request.path != "/api/health":
-        log.info("%s %s -> %s in %d ms [%s]", request.method, request.path,
+        log.info("%s %s -> %s in %d ms [%s]", request.method,
+                 errors.safe_log_text(request.path),
                  response.status_code,
                  int((time.perf_counter() - getattr(g, "started", time.perf_counter())) * 1000),
                  getattr(g, "request_id", "-"))

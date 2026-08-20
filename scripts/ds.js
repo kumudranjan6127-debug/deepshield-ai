@@ -8,7 +8,7 @@
    DeepShield and is therefore never sufficient authority to kill it.
    ============================================================ */
 
-const { execSync, spawn } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -31,7 +31,7 @@ const c = {
 function listeners() {
   try {
     if (IS_WIN) {
-      const out = execSync('netstat -ano', { encoding: 'utf8' });
+      const out = execFileSync('netstat.exe', ['-ano'], { encoding: 'utf8' });
       return [...new Set(
         out.split('\n')
           .filter(l => l.includes(`:${PORT}`) && l.includes('LISTENING'))
@@ -39,7 +39,7 @@ function listeners() {
           .filter(p => /^\d+$/.test(p) && p !== '0')
       )];
     }
-    return execSync(`lsof -ti:${PORT}`, { encoding: 'utf8' })
+    return execFileSync('lsof', [`-ti:${PORT}`], { encoding: 'utf8' })
       .split('\n').map(s => s.trim()).filter(Boolean);
   } catch {
     return [];
@@ -76,13 +76,16 @@ function processIdentity(pid) {
       return fields[19] ? `linux:${fields[19]}` : null;
     }
     if (IS_WIN) {
-      const out = execSync(
-        `powershell -NoProfile -Command "(Get-Process -Id ${pid}).StartTime.ToUniversalTime().Ticks"`,
+      const script = `(Get-Process -Id ${pid}).StartTime.ToUniversalTime().Ticks`;
+      const out = execFileSync(
+        'powershell.exe', ['-NoProfile', '-Command', script],
         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
       ).trim();
       return out ? `win:${out}` : null;
     }
-    const out = execSync(`ps -o lstart= -p ${pid}`, { encoding: 'utf8' }).trim();
+    const out = execFileSync(
+      'ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8' }
+    ).trim();
     return out ? `ps:${out}` : null;
   } catch {
     return null;
@@ -151,9 +154,10 @@ function writeOwnedPid(pid) {
 
 function signalOwned(pid, signal) {
   if (IS_WIN) {
-    const force = signal === 'SIGKILL' ? ' /F' : '';
+    const args = ['/PID', String(pid), '/T'];
+    if (signal === 'SIGKILL') args.push('/F');
     try {
-      execSync(`taskkill /PID ${pid} /T${force}`, { stdio: 'ignore' });
+      execFileSync('taskkill.exe', args, { stdio: 'ignore' });
       return true;
     } catch {
       return !pidAlive(pid);
