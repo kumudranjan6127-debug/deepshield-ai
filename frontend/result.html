@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="DeepShield AI — deepfake analysis result with verdict, confidence and risk level.">
+  <meta name="description" content="DeepShield AI — deepfake analysis result with an uncalibrated model score and risk level.">
   <title>Result · DeepShield AI</title>
 
   <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
@@ -163,13 +163,13 @@
             <!-- Verdict hero -->
             <section class="card card-pad-lg verdict-card fade-up" data-delay="1" aria-label="Verdict">
               <div class="ring-wrap">
-                <svg class="confidence-ring" id="conf-ring" viewBox="0 0 180 180" role="img" aria-label="Detection confidence">
+                <svg class="confidence-ring" id="conf-ring" viewBox="0 0 180 180" role="img" aria-label="Uncalibrated model score">
                   <circle class="ring-track" cx="90" cy="90" r="80"></circle>
                   <circle class="ring-value" id="ring-value" cx="90" cy="90" r="80"></circle>
                 </svg>
                 <div class="ring-center">
                   <span class="ring-pct mono" id="conf-pct">—</span>
-                  <span class="text-xs text-3">detection confidence</span>
+                  <span class="text-xs text-3">uncalibrated model score</span>
                 </div>
               </div>
 
@@ -190,7 +190,7 @@
                 </span>
                 <p class="text-xs text-3" id="scope-body"></p>
               </div>
-              <p class="text-xs text-3" id="verdict-caveat">A detection confidence score, not a probability that the media is fake &mdash; this model has not been calibrated.</p>
+              <p class="text-xs text-3" id="verdict-caveat">An uncalibrated model score, not a probability that the media is fake.</p>
 
               <!-- What produced this verdict. The engine badge is per-scan,
                    not per-page: a result read from history has to say

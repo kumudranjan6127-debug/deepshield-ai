@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 import statistics
-from typing import Iterable
+from collections.abc import Iterable
 
 import inference_legacy as _legacy
 from config import CFG
@@ -45,6 +45,7 @@ def risk_for(prediction: str, confidence: int) -> str:
 
 
 def certainty_for(confidence: int) -> str:
+    """Map an uncalibrated score to a qualitative evidence-strength band."""
     for lower, key, _ in CFG.CERTAINTY_BANDS:
         if confidence >= lower:
             return key
@@ -141,6 +142,7 @@ class _Engine(_legacy._Engine):
     def __init__(self):
         super().__init__()
         self.info["calibrated"] = bool(self.meta.get("calibrated", False))
+        self.info["score_description"] = CFG.SCORE_DESCRIPTION
 
     def predict_image(self, path):
         """Return a neutral compatibility value when no face is detectable."""
@@ -194,7 +196,8 @@ class _Engine(_legacy._Engine):
             raise ValueError("Could not open video")
 
         fps = cap.get(cv2.CAP_PROP_FPS)
-        fps = float(fps) if fps and fps == fps and fps > 0 else 25.0
+        # Self-comparison deliberately preserves the existing OpenCV NaN check.
+        fps = float(fps) if fps and fps == fps and fps > 0 else 25.0  # noqa: PLR0124
         step = max(1, round(fps / max(0.25, float(frame_rate))))
         fake_i = self.classes.index("fake")
         records, idx = [], 0
@@ -303,7 +306,7 @@ def engine_info() -> dict:
 
 
 def score_image(path) -> float:
-    """P(fake) through the same face selection/preprocessing as serving."""
+    """Uncalibrated fake-class score using production preprocessing."""
     from PIL import Image
 
     eng = _get_engine()
@@ -349,12 +352,15 @@ def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
             confidence = 50
         else:
             prediction = "deepfake" if score >= 0.5 else "real"
-            confidence = int(round(max(score, 1.0 - score) * 100))
+            confidence = round(max(score, 1.0 - score) * 100)
         hottest = sorted(records, key=lambda r: r["pFake"], reverse=True)
 
         return {
             "prediction": prediction,
             "confidence": confidence,
+            "uncalibratedScore": round(score, 6),
+            "scoreLabel": CFG.SCORE_DESCRIPTION,
+            "scoreCalibrated": False,
             "framesAnalyzed": len(records),
             "faceFound": any_face,
             "facesFound": max((r["facesFound"] for r in records), default=0),
@@ -411,6 +417,9 @@ def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
             return {
                 "prediction": "real",
                 "confidence": 50,
+                "uncalibratedScore": 0.5,
+                "scoreLabel": CFG.SCORE_DESCRIPTION,
+                "scoreCalibrated": False,
                 "framesAnalyzed": 1,
                 "faceFound": False,
                 "facesFound": 0,
@@ -437,22 +446,25 @@ def analyze_file(path, file_type, frame_rate=CFG.DEFAULT_FRAME_RATE):
                     "model": verifier.name,
                     "pFake": round(verifier.p_fake(face), 4),
                 })
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - optional verifier is best-effort
                 pass
 
         try:
             explain = eng.explain(face, landmarks)
-        except Exception:
+        except Exception:  # noqa: BLE001 - explainability is best-effort
             explain = None
 
     p_fake = _combine_image_votes(votes)
     prediction = "deepfake" if p_fake >= 0.5 else "real"
-    confidence = int(round(max(p_fake, 1.0 - p_fake) * 100))
+    confidence = round(max(p_fake, 1.0 - p_fake) * 100)
     disputed = any((v["pFake"] >= 0.5) != (p_fake >= 0.5) for v in votes)
 
     return {
         "prediction": prediction,
         "confidence": confidence,
+        "uncalibratedScore": round(p_fake, 6),
+        "scoreLabel": CFG.SCORE_DESCRIPTION,
+        "scoreCalibrated": False,
         "framesAnalyzed": 1,
         "faceFound": True,
         "facesFound": len(faces),

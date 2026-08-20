@@ -116,7 +116,8 @@ def human_summary(report):
         ),
         "",
         "Metrics exclude inconclusive/no-face samples and processing errors.",
-        "Confidence is the current model's winning-class confidence, not calibrated probability.",
+        ("The retained confidence field is the API-compatible winning-class display; "
+         "p_fake is an uncalibrated model score, not a probability."),
     ]) + "\n"
 
 
@@ -143,10 +144,14 @@ def main():
             result = analyze_file(str(path), "image")
             elapsed_ms = (time.perf_counter() - started) * 1000
             rows.append({
-                "file": str(path.relative_to(args.dataset)),
+                "file": path.relative_to(args.dataset).as_posix(),
                 "label": label,
                 "prediction": result.get("prediction", ""),
                 "confidence": result.get("confidence", ""),
+                # Raw model score for scripts/evaluate.py. It is deliberately
+                # named as a score there, not a calibrated probability.
+                "p_fake": result.get("uncalibratedScore", ""),
+                "score_label": result.get("scoreLabel", "uncalibrated model score"),
                 "face_found": bool(result.get("faceFound", False)),
                 "face_count": result.get("facesFound", ""),
                 # Older current-engine responses report no face with
@@ -161,8 +166,9 @@ def main():
             })
         except Exception as exc:  # noqa: BLE001 - one bad sample must not abort the run
             rows.append({
-                "file": str(path.relative_to(args.dataset)), "label": label,
-                "prediction": "", "confidence": "", "face_found": "",
+                "file": path.relative_to(args.dataset).as_posix(), "label": label,
+                "prediction": "", "confidence": "", "p_fake": "",
+                "score_label": "uncalibrated model score", "face_found": "",
                 "face_count": "", "inconclusive": False, "latency_ms": "",
                 "error": f"{type(exc).__name__}: {exc}",
             })

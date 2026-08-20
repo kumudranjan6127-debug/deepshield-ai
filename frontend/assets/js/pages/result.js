@@ -374,27 +374,27 @@ function renderCertainty() {
     chip.hidden = false;
   }
 
-  /* "Detection confidence 94%" — never "94% probability it is fake". The
+  /* "Uncalibrated model score 94%" — never "94% probability it is fake". The
      model is uncalibrated, so the number ranks evidence; it does not
      estimate a frequency. */
   const strength = band ? ` — ${band.label.toLowerCase()}` : '';
   document.getElementById('verdict-note').textContent = isFake
-    ? `Detection confidence ${confidence}%${strength}. Patterns consistent with synthetic manipulation were found across the analyzed ${unit}.`
-    : `Detection confidence ${confidence}%${strength}. No manipulation artifacts were found across the analyzed ${unit}.`;
+    ? `Uncalibrated model score ${confidence}%${strength}. Patterns consistent with synthetic manipulation were found across the analyzed ${unit}.`
+    : `Uncalibrated model score ${confidence}%${strength}. No manipulation artifacts were found across the analyzed ${unit}.`;
 }
 
 /* ---- Verdict hero: ring, badge, risk chip, explanation ---- */
 function renderVerdict(scan, isFake, isVideo, inconclusive) {
   const confidence = Math.max(0, Math.min(100, Math.round(scan.confidence || 0)));
 
-  /* Confidence ring — sweep animated via CSS transition on dashoffset */
+  /* Model-score ring — sweep animated via CSS transition on dashoffset */
   const ring = document.getElementById('ring-value');
   const C = 2 * Math.PI * 80; // r = 80 in the 180×180 viewBox
   if (!inconclusive) ring.classList.add(isFake ? 'fake' : 'real');
   ring.style.strokeDasharray = String(C);
   ring.style.strokeDashoffset = String(C);
   document.getElementById('conf-ring').setAttribute(
-    'aria-label', inconclusive ? 'No model verdict' : `Detection confidence ${confidence}%`);
+    'aria-label', inconclusive ? 'No model verdict' : `Uncalibrated model score ${confidence}%`);
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {

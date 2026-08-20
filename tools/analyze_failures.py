@@ -11,7 +11,8 @@ from dataset_common import read_csv
 from summarize_benchmark import _bool
 
 FIELDS = ["category", "file_path", "true_label", "predicted_label", "confidence",
-          "face_count", "source_dataset", "manipulation_type", "latency_ms"]
+          "face_count", "source_dataset", "manipulation_type", "generator_family",
+          "robustness_slice", "split", "identity_group", "latency_ms"]
 
 
 def analyze(predictions, manifest, high_confidence=90, low_confidence=70):
@@ -45,6 +46,11 @@ def analyze(predictions, manifest, high_confidence=90, low_confidence=70):
                             "face_count": prediction.get("face_count", ""),
                             "source_dataset": meta.get("source_dataset", ""),
                             "manipulation_type": meta.get("manipulation_type", ""),
+                            "generator_family": meta.get("generator_family", ""),
+                            "robustness_slice": meta.get("robustness_slice", ""),
+                            "split": meta.get("split", ""),
+                            "identity_group": (meta.get("identity_group", "") or
+                                               meta.get("identity_id", "")),
                             "latency_ms": prediction.get("latency_ms", "")})
     counts = {name: sum(row["category"] == name for row in records)
               for name in ("false_positive", "false_negative", "high_confidence_wrong", "no_face", "low_confidence")}

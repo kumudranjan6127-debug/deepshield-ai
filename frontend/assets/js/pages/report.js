@@ -37,14 +37,14 @@ function renderList(current) {
     const badgeClass = inconclusive ? 'badge-warning'
       : (isFake ? 'badge-danger' : 'badge-success');
     const verdict = inconclusive ? 'Inconclusive' : (isFake ? 'Deepfake' : 'Real');
-    const score = inconclusive ? '' : ` · <span class="mono">${s.confidence}%</span>`;
+    const score = inconclusive ? '' : ` · score <span class="mono">${s.confidence}%</span>`;
     return `
       <a class="report-row${active}" href="report.html?id=${encodeURIComponent(s.id)}">
         <span class="report-row-main">
           <span class="report-row-name">${DS.util.escapeHtml(DS.util.truncate(s.fileName || '—', 34))}</span>
           <span class="report-row-meta text-xs">${DS.util.formatDate(s.completedAt)}</span>
         </span>
-        <span class="badge ${badgeClass}">${verdict}${score}</span>
+        <span class="badge ${badgeClass}" title="Uncalibrated model score">${verdict}${score}</span>
       </a>`;
   }).join('');
 
@@ -198,14 +198,14 @@ function buildSummary(scan) {
   const risk = (scan.riskLevel || 'Medium').toLowerCase();
 
   if (scan.prediction === 'deepfake') {
-    return `The submitted ${media} was classified as a likely deepfake with ${scan.confidence}% model `
-      + `confidence, based on analysis of ${frameTxt}. Detected patterns are consistent with `
+    return `The submitted ${media} was classified as a likely deepfake with an uncalibrated ${scan.confidence}% model `
+      + `score, based on analysis of ${frameTxt}. Detected patterns are consistent with `
       + `synthetically generated or manipulated facial content, placing this media at ${risk} risk. `
       + `We recommend verifying the original source before this content is shared or relied upon.`
       + scopeSentence(scan);
   }
-  return `The submitted ${media} was classified as likely authentic with ${scan.confidence}% model `
-    + `confidence, based on analysis of ${frameTxt}. No significant manipulation artifacts were `
+  return `The submitted ${media} was classified as likely authentic with an uncalibrated ${scan.confidence}% model `
+    + `score, based on analysis of ${frameTxt}. No significant manipulation artifacts were `
     + `detected, and the media is rated ${risk} risk. As with any automated screening, pairing this `
     + `result with source verification is recommended for sensitive use cases.`
     + scopeSentence(scan);

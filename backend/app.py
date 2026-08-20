@@ -342,6 +342,7 @@ def health():
         # keeping its own copy of the thresholds.
         "certainty_bands": inference.certainty_bands(),
         "calibrated": False,   # no reliability curve has ever been measured
+        "score_description": CFG.SCORE_DESCRIPTION,
         **info,
     })
 
@@ -372,6 +373,7 @@ def version():
         "input_size": identity.get("input_size"),
         "classes": info.get("classes"),
         "calibrated": False,
+        "score_description": CFG.SCORE_DESCRIPTION,
     })
 
 
@@ -543,7 +545,8 @@ def analyze():
             # did not emit are dropped rather than sent as null.
             extras = {k: result[k] for k in
                       ("ensemble", "disputed", "explain", "video",
-                       "faceFound", "facesFound", "insufficientEvidence", "reason")
+                       "faceFound", "facesFound", "insufficientEvidence", "reason",
+                       "uncalibratedScore", "scoreLabel", "scoreCalibrated")
                       if k in result}
         else:
             # No model, or a metadata-only request: the labelled demo engine
@@ -559,6 +562,11 @@ def analyze():
             "ok": True,
             "prediction": prediction,
             "confidence": confidence,
+            # Compatibility: confidence remains numeric for current clients.
+            # Its descriptor is explicit so it cannot be read as a calibrated
+            # probability while V5 calibration is still pending.
+            "scoreLabel": CFG.SCORE_DESCRIPTION,
+            "scoreCalibrated": False,
             # Which engine produced THIS verdict. /api/health also reports
             # the engine, but that is a different request at a different
             # moment — a result read hours later from history must be able
