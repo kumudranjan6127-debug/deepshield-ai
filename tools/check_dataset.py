@@ -6,18 +6,24 @@ import argparse
 import json
 from pathlib import Path
 
-from dataset_common import (IMAGE_EXTENSIONS, MANIFEST_FIELDS, dhash_of,
-                            distribution, duplicate_groups, image_details,
-                            read_csv, resolution_distribution, sha256_of)
+from dataset_common import (
+    IMAGE_EXTENSIONS,
+    MANIFEST_FIELDS,
+    dhash_of,
+    distribution,
+    duplicate_groups,
+    image_details,
+    manifest_validation_errors,
+    read_csv,
+    resolution_distribution,
+    safe_media_path,
+    sha256_of,
+)
 
 
 def _safe_path(dataset: Path, relative: str) -> Path | None:
-    candidate = (dataset / relative).resolve()
-    try:
-        candidate.relative_to(dataset.resolve())
-    except ValueError:
-        return None
-    return candidate
+    candidate, error = safe_media_path(dataset, relative)
+    return None if error else candidate
 
 
 def _training_identities(path: Path | None):
@@ -67,7 +73,7 @@ def inspect(dataset: Path, rows: list[dict], training_manifest: Path | None = No
             row_issues.append("unsupported format")
             unsupported_files.append(relative)
         else:
-            width, height, image_error = image_details(path)
+            _width, _height, image_error = image_details(path)
             if image_error:
                 row_issues.append(image_error)
                 invalid_files.append(relative)
@@ -78,7 +84,7 @@ def inspect(dataset: Path, rows: list[dict], training_manifest: Path | None = No
                     row_issues.append("manifest sha256 does not match file")
                 try:
                     image_hashes[relative] = dhash_of(path)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     row_issues.append(f"could not hash image pixels: {type(exc).__name__}")
 
         if any(issue.startswith("missing") for issue in row_issues):
@@ -92,6 +98,7 @@ def inspect(dataset: Path, rows: list[dict], training_manifest: Path | None = No
     duplicate_paths = {item for group in exact + visual for item in group}
     identity_status, overlapping_ids = _identity_status(rows, training_manifest)
     labels = distribution(rows, "label")
+    split_errors = manifest_validation_errors(rows, dataset)
 
     return {
         "total_samples": len(rows),
@@ -112,6 +119,8 @@ def inspect(dataset: Path, rows: list[dict], training_manifest: Path | None = No
         "missing_metadata_files": sorted(set(missing_metadata)),
         "identity_overlap_status": identity_status,
         "overlapping_identity_ids": overlapping_ids,
+        "v5_manifest_error_count": len(split_errors),
+        "v5_manifest_errors": split_errors,
         "problems": problems,
     }
 
@@ -129,6 +138,7 @@ def format_report(report: dict) -> str:
         f"Missing provenance: {report['missing_provenance_count']}",
         f"Missing required metadata: {report['missing_metadata_count']}",
         f"Identity overlap: {report['identity_overlap_status']}",
+        f"V5 split/path validation errors: {report['v5_manifest_error_count']}",
         "", "Sources:", table(report["source_distribution"]),
         "", "Manipulation types:", table(report["manipulation_type_distribution"]),
         "", "Resolution buckets:", table(report["resolution_distribution"]), "",
@@ -155,7 +165,13 @@ def main():
     (args.out_dir / "dataset_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     (args.out_dir / "dataset_report.txt").write_text(format_report(report), encoding="utf-8")
     print(format_report(report))
+    if report["v5_manifest_errors"]:
+        print("V5 manifest validation errors:")
+        for error in report["v5_manifest_errors"]:
+            print(f"  - {error}")
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

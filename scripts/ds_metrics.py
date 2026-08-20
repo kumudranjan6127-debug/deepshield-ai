@@ -21,10 +21,29 @@ be a lie that looks like a measurement.
 """
 import numpy as np
 
-__all__ = ["confusion", "roc_auc", "pr_auc", "evaluate", "sweep",
-           "threshold_for_fpr", "format_report",
-           "brier", "reliability", "ece", "mce", "format_calibration",
-           "band_accuracy", "format_bands"]
+__all__ = [
+    "abstention_summary",
+    "apply_temperature",
+    "band_accuracy",
+    "bootstrap_confidence_intervals",
+    "brier",
+    "confusion",
+    "decide_with_abstention",
+    "ece",
+    "evaluate",
+    "fit_temperature",
+    "format_bands",
+    "format_calibration",
+    "format_report",
+    "logits_from_probabilities",
+    "mce",
+    "pr_auc",
+    "reliability",
+    "roc_auc",
+    "select_abstention_thresholds",
+    "sweep",
+    "threshold_for_fpr",
+]
 
 DEFAULT_THRESHOLD = 0.5
 
@@ -36,6 +55,13 @@ def _clean(y_true, score):
         raise ValueError(f"y_true {y.shape} and score {s.shape} differ in length")
     if y.size and not np.isin(y, (0, 1)).all():
         raise ValueError("y_true must contain only 0 (real) and 1 (fake)")
+    return y, s
+
+
+def _clean_probability(y_true, score):
+    y, s = _clean(y_true, score)
+    if not np.isfinite(s).all() or ((s < 0) | (s > 1)).any():
+        raise ValueError("scores must be finite values in [0, 1]")
     return y, s
 
 
@@ -155,6 +181,269 @@ def threshold_for_fpr(y_true, score, target_fpr=0.01):
     return None
 
 
+# ------------------------------------------------------- V5 calibration and
+#                                                       abstention policy
+
+def logits_from_probabilities(score, epsilon=1e-6):
+    """Safely recover binary logits from an uncalibrated P(fake) score.
+
+    Temperature scaling acts on logits. An exported ONNX model may make
+    those available directly; when it does not, the log-odds transform is
+    mathematically equivalent for a two-class softmax. Clipping avoids an
+    infinite logit from a rounded 0 or 1 without changing the ordering.
+    """
+    s = np.asarray(score, dtype=float).ravel()
+    if not np.isfinite(s).all() or ((s < 0) | (s > 1)).any():
+        raise ValueError("probabilities must be finite values in [0, 1]")
+    if not 0 < epsilon < 0.5:
+        raise ValueError("epsilon must be between 0 and 0.5")
+    p = np.clip(s, epsilon, 1.0 - epsilon)
+    return np.log(p) - np.log1p(-p)
+
+
+def _sigmoid(values):
+    values = np.asarray(values, dtype=float)
+    # Stable for both saturated ONNX logits and p=0/1 transformed above.
+    positive = values >= 0
+    out = np.empty_like(values)
+    out[positive] = 1.0 / (1.0 + np.exp(-values[positive]))
+    exp_values = np.exp(values[~positive])
+    out[~positive] = exp_values / (1.0 + exp_values)
+    return out
+
+
+def _nll(y, logits):
+    return float(np.mean(np.logaddexp(0.0, logits) - y * logits))
+
+
+def fit_temperature(y_true, *, logits=None, probabilities=None,
+                    minimum=0.05, maximum=10.0):
+    """Fit one temperature on the explicitly held-out calibration set.
+
+    The implementation uses scalar golden-section minimisation rather than
+    adding scipy/torch to the small production environment. It returns a
+    serialisable record containing enough provenance to audit how a future
+    score was transformed; callers must record it with the calibration split,
+    never with validation or sealed-test rows.
+    """
+    if (logits is None) == (probabilities is None):
+        raise ValueError("provide exactly one of logits or probabilities")
+    if not 0 < minimum < maximum:
+        raise ValueError("temperature bounds must satisfy 0 < minimum < maximum")
+    if probabilities is not None:
+        y, p = _clean_probability(y_true, probabilities)
+        raw_logits = logits_from_probabilities(p)
+        input_kind = "probabilities_logit_transform"
+        before = p
+    else:
+        y = np.asarray(y_true).astype(int).ravel()
+        raw_logits = np.asarray(logits, dtype=float).ravel()
+        if y.shape != raw_logits.shape:
+            raise ValueError("y_true and logits differ in length")
+        if y.size and not np.isin(y, (0, 1)).all():
+            raise ValueError("y_true must contain only 0 (real) and 1 (fake)")
+        if not np.isfinite(raw_logits).all():
+            raise ValueError("logits must be finite")
+        input_kind = "stored_logits"
+        before = _sigmoid(raw_logits)
+    if not y.size or not (y == 0).any() or not (y == 1).any():
+        raise ValueError("temperature fitting requires both real and fake calibration samples")
+
+    lo, hi = np.log(minimum), np.log(maximum)
+    phi = (1.0 + np.sqrt(5.0)) / 2.0
+    c = hi - (hi - lo) / phi
+    d = lo + (hi - lo) / phi
+    for _ in range(80):
+        if _nll(y, raw_logits / np.exp(c)) <= _nll(y, raw_logits / np.exp(d)):
+            hi = d
+        else:
+            lo = c
+        c = hi - (hi - lo) / phi
+        d = lo + (hi - lo) / phi
+    temperature = float(np.exp((lo + hi) / 2.0))
+    after = _sigmoid(raw_logits / temperature)
+    return {
+        "method": "temperature_scaling",
+        "temperature": temperature,
+        "input": input_kind,
+        "n": int(y.size),
+        "n_real": int((y == 0).sum()),
+        "n_fake": int((y == 1).sum()),
+        "nll_before": _nll(y, raw_logits),
+        "nll_after": _nll(y, raw_logits / temperature),
+        "brier_before": brier(y, before),
+        "brier_after": brier(y, after),
+        "ece_before": ece(y, before),
+        "ece_after": ece(y, after),
+    }
+
+
+def apply_temperature(*, logits=None, probabilities=None, temperature):
+    """Apply a previously fitted temperature without re-fitting it."""
+    if (logits is None) == (probabilities is None):
+        raise ValueError("provide exactly one of logits or probabilities")
+    if not np.isfinite(temperature) or temperature <= 0:
+        raise ValueError("temperature must be a positive finite number")
+    raw = (np.asarray(logits, dtype=float).ravel() if logits is not None
+           else logits_from_probabilities(probabilities))
+    if not np.isfinite(raw).all():
+        raise ValueError("logits must be finite")
+    return _sigmoid(raw / float(temperature))
+
+
+def decide_with_abstention(score, real_threshold, fake_threshold):
+    """Classify only when the score clears a real/fake evidence boundary."""
+    scores = np.asarray(score, dtype=float).ravel()
+    if not np.isfinite(scores).all() or ((scores < 0) | (scores > 1)).any():
+        raise ValueError("scores must be finite values in [0, 1]")
+    if not 0 <= real_threshold < fake_threshold <= 1:
+        raise ValueError("thresholds must satisfy 0 <= real < fake <= 1")
+    return np.where(scores <= real_threshold, "real",
+                    np.where(scores >= fake_threshold, "fake", "inconclusive"))
+
+
+def abstention_summary(y_true, score, real_threshold, fake_threshold):
+    """Decision coverage and conclusive confusion matrix for a three-way policy."""
+    y, s = _clean_probability(y_true, score)
+    verdict = decide_with_abstention(s, real_threshold, fake_threshold)
+    conclusive = verdict != "inconclusive"
+    predicted = (verdict[conclusive] == "fake").astype(int)
+    actual = y[conclusive]
+    return {
+        "n": int(y.size),
+        "conclusive": int(conclusive.sum()),
+        "inconclusive": int((~conclusive).sum()),
+        "coverage": float(conclusive.mean()) if y.size else None,
+        "inconclusive_rate": float((~conclusive).mean()) if y.size else None,
+        "conclusive_metrics": evaluate(actual, predicted.astype(float), 0.5),
+    }
+
+
+def select_abstention_thresholds(y_true, score, target_fpr=0.01,
+                                 target_fnr=0.01, minimum_band=0.10):
+    """Choose real/fake cut points using validation data only.
+
+    ``minimum_band`` reserves an inconclusive interval around 0.5. Lowering
+    the real boundary and raising the fake boundary can only improve the two
+    controlled error budgets, so the interval is never narrowed merely to
+    make a validation number look better.
+    """
+    y, s = _clean_probability(y_true, score)
+    if not y.size or not (y == 0).any() or not (y == 1).any():
+        raise ValueError("threshold selection requires both real and fake validation samples")
+    if not 0 <= target_fpr <= 1 or not 0 <= target_fnr <= 1:
+        raise ValueError("target FPR and FNR must be in [0, 1]")
+    if not 0 <= minimum_band < 1:
+        raise ValueError("minimum_band must be in [0, 1)")
+
+    fake_point = threshold_for_fpr(y, s, target_fpr)
+    fake_threshold = float(fake_point[0]) if fake_point else 1.0
+    fake_threshold = min(1.0, max(0.5, fake_threshold))
+    actual_fpr = float((s[y == 0] >= fake_threshold).mean())
+    if actual_fpr > target_fpr:
+        raise ValueError(
+            "no fake threshold in [0, 1] satisfies the validation FPR budget")
+
+    # A standard threshold calls scores *below* it real. Take the greatest
+    # one that preserves the validation FNR budget, then make room for the
+    # abstention band conservatively.
+    real_candidates = sorted(set(np.r_[0.0, s[s <= 0.5]]))
+    fake_scores = s[y == 1]
+    # The three-way policy calls scores *equal* to this boundary real. Using
+    # evaluate(..., threshold=t) here would count equality as fake and could
+    # silently exceed the requested FNR budget at the chosen boundary.
+    feasible = [
+        t for t in real_candidates
+        if float((fake_scores <= t).mean()) <= target_fnr
+    ]
+    if not feasible:
+        raise ValueError(
+            "no real threshold in [0, 1] satisfies the validation FNR budget")
+    real_threshold = float(max(feasible))
+    half_band = minimum_band / 2.0
+    real_threshold = min(real_threshold, 0.5 - half_band)
+    fake_threshold = max(fake_threshold, 0.5 + half_band)
+    policy = abstention_summary(y, s, real_threshold, fake_threshold)
+    policy.update({
+        "source_split": "validation",
+        "real_threshold": real_threshold,
+        "fake_threshold": fake_threshold,
+        "target_fpr": float(target_fpr),
+        "target_fnr": float(target_fnr),
+        "minimum_band": float(minimum_band),
+    })
+    return policy
+
+
+def bootstrap_confidence_intervals(y_true, score, threshold=DEFAULT_THRESHOLD,
+                                   resamples=200, confidence=0.95, seed=42,
+                                   groups=None):
+    """Non-parametric CIs, resampling groups when their ids are available."""
+    y, s = _clean_probability(y_true, score)
+    if resamples < 0:
+        raise ValueError("resamples must be non-negative")
+    if not 0 < confidence < 1:
+        raise ValueError("confidence must be in (0, 1)")
+    metric_names = ("accuracy", "precision", "recall", "specificity", "f1",
+                    "fpr", "fnr", "roc_auc", "pr_auc", "brier", "ece")
+    estimate = evaluate(y, s, threshold)
+    estimate.update({"brier": brier(y, s), "ece": ece(y, s)})
+    result = {name: {"estimate": estimate.get(name), "lower": None, "upper": None,
+                     "valid_resamples": 0} for name in metric_names}
+    if not resamples or not y.size:
+        if groups is None:
+            independent_units = int(y.size)
+        else:
+            group_values = np.asarray(groups, dtype=object).ravel()
+            if group_values.shape != y.shape:
+                raise ValueError("groups must have one value per sample")
+            independent_units = len({
+                (str(group).strip()
+                 if group is not None and str(group).strip()
+                 else f"__row_{index}")
+                for index, group in enumerate(group_values)
+            })
+        return {"resamples": int(resamples), "confidence": float(confidence),
+                "unit": "groups" if groups is not None else "samples",
+                "independent_units": independent_units, "metrics": result}
+
+    rng = np.random.default_rng(seed)
+    if groups is None:
+        units = [np.array([i], dtype=int) for i in range(y.size)]
+        unit_name = "samples"
+    else:
+        group_values = np.asarray(groups, dtype=object).ravel()
+        if group_values.shape != y.shape:
+            raise ValueError("groups must have one value per sample")
+        grouped = {}
+        for index, group in enumerate(group_values):
+            # Missing groups do not become one correlated pseudo-person.
+            key = (str(group).strip()
+                   if group is not None and str(group).strip()
+                   else f"__row_{index}")
+            grouped.setdefault(key, []).append(index)
+        units = [np.asarray(indexes, dtype=int) for indexes in grouped.values()]
+        unit_name = "groups"
+    values = {name: [] for name in metric_names}
+    for _ in range(resamples):
+        sampled_units = rng.integers(0, len(units), len(units))
+        indexes = np.concatenate([units[int(index)] for index in sampled_units])
+        row = evaluate(y[indexes], s[indexes], threshold)
+        row.update({"brier": brier(y[indexes], s[indexes]), "ece": ece(y[indexes], s[indexes])})
+        for name in metric_names:
+            if row[name] is not None:
+                values[name].append(float(row[name]))
+    low = (1.0 - confidence) / 2.0 * 100.0
+    high = (1.0 + confidence) / 2.0 * 100.0
+    for name, series in values.items():
+        if series:
+            result[name].update({"lower": float(np.percentile(series, low)),
+                                 "upper": float(np.percentile(series, high)),
+                                 "valid_resamples": len(series)})
+    return {"resamples": int(resamples), "confidence": float(confidence),
+            "unit": unit_name, "independent_units": len(units), "metrics": result}
+
+
 # -------------------------------------------------------------- calibration
 #
 # Discrimination and calibration are different questions, and a model can
@@ -172,7 +461,7 @@ def brier(y_true, score):
     """Mean squared error of the probability. 0 is perfect; 0.25 is what
     you get by answering 0.5 to everything, so anything above 0.25 is
     worse than admitting you do not know."""
-    y, s = _clean(y_true, score)
+    y, s = _clean_probability(y_true, score)
     return float(((s - y) ** 2).mean()) if y.size else None
 
 
@@ -187,7 +476,7 @@ def reliability(y_true, score, bins=10, mode="positive"):
 
     → [{lo, hi, n, mean_score, observed, gap}]; empty bins are dropped.
     """
-    y, s = _clean(y_true, score)
+    y, s = _clean_probability(y_true, score)
     if not y.size:
         return []
 
@@ -271,13 +560,13 @@ def format_report(m, title=""):
     head = f"  {title}" if title else ""
     return "\n".join(filter(None, [
         head,
-        f"    n = {m['n']}   ({m['n_real']} real, {m['n_fake']} fake)"
-        f"   threshold {m['threshold']:.2f}",
+        (f"    n = {m['n']}   ({m['n_real']} real, {m['n_fake']} fake)"
+         f"   threshold {m['threshold']:.2f}"),
         "",
-        f"      Accuracy    {_pct(m['accuracy'])}      TP {m['tp']:>6}   "
-        f"FN {m['fn']:>6}   (fake)",
-        f"      Precision   {_pct(m['precision'])}      FP {m['fp']:>6}   "
-        f"TN {m['tn']:>6}   (real)",
+        (f"      Accuracy    {_pct(m['accuracy'])}      TP {m['tp']:>6}   "
+         f"FN {m['fn']:>6}   (fake)"),
+        (f"      Precision   {_pct(m['precision'])}      FP {m['fp']:>6}   "
+         f"TN {m['tn']:>6}   (real)"),
         f"      Recall      {_pct(m['recall'])}",
         f"      Specificity {_pct(m['specificity'])}      ROC-AUC  "
         + ("   n/a" if m["roc_auc"] is None else f"{m['roc_auc']:.4f}"),
@@ -304,7 +593,7 @@ def format_calibration(y_true, score, bins=10, mode="positive"):
     lines = [f"    {claimed:>19}        n   {happened:>16}       gap",
              "    " + "-" * 72]
     for r in rows:
-        bar = ("<" if r["gap"] < 0 else ">") * int(round(abs(r["gap"]) * 40))
+        bar = ("<" if r["gap"] < 0 else ">") * round(abs(r["gap"]) * 40)
         lines.append(f"    {r['lo']:>8.2f} - {r['hi']:.2f} {r['n']:>8}   "
                      f"{r['observed'] * 100:>15.1f}%   {r['gap']:+.3f}  {bar}")
 

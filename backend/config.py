@@ -4,6 +4,7 @@ Nothing here imports the rest of the app, so it can be read (and tested)
 on its own. Import it as `from config import CFG`.
 """
 import os
+from typing import ClassVar
 
 
 def _bool(name: str, default: bool = False) -> bool:
@@ -57,7 +58,8 @@ class Config:
     # ---- Upload / analysis limits ----
     MAX_URL_BYTES = _int("DS_MAX_URL_MB", 100) * 1024 * 1024
     URL_TIMEOUT_SECONDS = _int("DS_URL_TIMEOUT", 30)
-    ALLOWED_UPLOAD_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".webm", ".mov"}
+    ALLOWED_UPLOAD_EXTS: ClassVar[set[str]] = {
+        ".jpg", ".jpeg", ".png", ".webp", ".mp4", ".webm", ".mov"}
     MAX_VIDEO_FRAMES = _int("DS_MAX_FRAMES", 60)
     DEFAULT_FRAME_RATE = 1.0
 
@@ -147,7 +149,8 @@ class Config:
     # missed forgery. Every component is returned in the response, so the
     # combination can be re-derived — or replaced — without re-running
     # anything. `scripts/video_test.py` fixes the behaviour they produce.
-    VIDEO_WEIGHTS = {"median": 0.40, "mean": 0.25, "top_k": 0.35}
+    VIDEO_WEIGHTS: ClassVar[dict[str, float]] = {
+        "median": 0.40, "mean": 0.25, "top_k": 0.35}
     VIDEO_TOPK_FRACTION = 0.15      # k = 15% of sampled frames, at least 1
     # A frame counts as suspicious when its own score reaches the level
     # Phase 5 already calls "strong evidence" (the 70 band), rather than at
@@ -176,6 +179,7 @@ class Config:
         (30, "uncertain",   "Uncertain"),
         (0,  "low_evidence", "Low evidence"),
     )
+    SCORE_DESCRIPTION = "uncalibrated model score"
 
     @classmethod
     def ensure_dirs(cls):

@@ -44,7 +44,9 @@ def test_health_publishes_the_certainty_bands(client):
 
 
 def test_health_admits_it_is_not_calibrated(client):
-    assert client.get("/api/health").get_json()["calibrated"] is False
+    body = client.get("/api/health").get_json()
+    assert body["calibrated"] is False
+    assert body["score_description"] == "uncalibrated model score"
 
 
 # ---------------------------------------------------------------- analyze
@@ -54,6 +56,9 @@ def test_analyze_multipart_image(client, engine_ready, fake_face):
     assert body["ok"] is True
     assert body["prediction"] in ("real", "deepfake")
     assert 50 <= body["confidence"] <= 100
+    assert body["scoreLabel"] == "uncalibrated model score"
+    assert body["scoreCalibrated"] is False
+    assert 0 <= body["uncalibratedScore"] <= 1
     assert body["riskLevel"] in ("Low", "Medium", "High")
     assert body["risk"] == body["riskLevel"].lower()
     assert body["certainty"] in ("very_strong", "strong", "uncertain", "low_evidence")

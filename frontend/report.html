@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="DeepShield AI — printable deepfake analysis report with verdict, confidence and full detection details.">
+  <meta name="description" content="DeepShield AI — printable deepfake analysis report with verdict, uncalibrated model score and full detection details.">
   <title>Report · DeepShield AI</title>
 
   <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
@@ -184,7 +184,7 @@
             </div>
             <div class="verdict-side">
               <span class="verdict-conf mono" id="verdict-conf">—</span>
-              <span class="verdict-conf-label">Detection confidence</span>
+              <span class="verdict-conf-label">Uncalibrated model score</span>
             </div>
             <span class="badge badge-warning" id="risk-badge">— risk</span>
           </div>
@@ -231,7 +231,7 @@
             <h2 class="eyebrow doc-section-title">Detection outcome</h2>
             <dl class="meta-list">
               <div class="meta-row"><dt>Prediction</dt><dd id="d-prediction">—</dd></div>
-              <div class="meta-row"><dt>Confidence</dt><dd class="mono" id="d-confidence">—</dd></div>
+              <div class="meta-row"><dt>Uncalibrated model score</dt><dd class="mono" id="d-confidence">—</dd></div>
               <div class="meta-row"><dt>Risk level</dt><dd id="d-risk">—</dd></div>
               <div class="meta-row"><dt>Decision threshold</dt><dd class="mono" id="d-threshold">—</dd></div>
             </dl>
@@ -260,8 +260,8 @@
 
           <!-- 7. Disclaimer -->
           <footer class="doc-disclaimer text-xs text-3">
-            DeepShield AI is a research and educational tool. Detection results are probabilistic
-            model outputs — not forensic evidence — and may be incorrect. Do not rely on this
+            DeepShield AI is a research and educational tool. Detection results are uncalibrated model scores, not probabilities;
+            they are model outputs — not forensic evidence — and may be incorrect. Do not rely on this
             report as the sole basis for legal, journalistic or safety-critical decisions.
           </footer>
 

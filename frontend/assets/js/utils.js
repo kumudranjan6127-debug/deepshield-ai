@@ -153,7 +153,7 @@ DS.history = {
 /* ---- Settings ---- */
 DS.SETTINGS_DEFAULTS = {
   frameRate: 1,        // frames sampled per second (video)
-  threshold: 60,       // confidence threshold (%)
+  threshold: 60,       // uncalibrated fake-class score threshold (%)
   reducedMotion: false,
   autoDelete: true,    // remove uploads after analysis
   effects: 'auto',     // 'auto' | 'full' (glass blur) | 'lite'

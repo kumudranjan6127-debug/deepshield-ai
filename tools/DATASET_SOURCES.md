@@ -55,11 +55,11 @@ faces, and both single- and multi-person images. Do not put these images,
 names, device identifiers, or consent records in the repository.
 
 Set `source_dataset` to `real_phone` in the metadata CSV. Use an opaque
-`identity_id` only where consent and local policy allow it; otherwise leave it
-blank and the pipeline will correctly report that identity-disjointness cannot
-be verified. `provenance` should describe the controlled local collection, and
-`usage_note` should record the relevant consent/usage restriction without
-including personal data.
+`identity_group` that is stable only inside the local evaluation ledger; do not
+store a name or other direct identifier. A row without a group cannot pass the
+V5 split-leakage gate. `provenance` should describe the controlled local
+collection, and `usage_note` should record the relevant consent/usage
+restriction without including personal data.
 
 ## Local layout and metadata
 
@@ -76,9 +76,9 @@ dataset/                         # ignored by Git
 `metadata.csv` is mandatory for a trustworthy run. The exact columns are:
 
 ```csv
-relative_path,label,source_dataset,source_id,identity_id,manipulation_type,provenance,usage_note
-real/phone_001.jpg,real,real_phone,local-001,,none,controlled-consented-collection,internal evaluation only
-fake/face_swap/frame_001.jpg,fake,dfdc,clip-123,actor-42,face_swap,DFDC metadata.json,subject to DFDC terms
+relative_path,label,modality,source_dataset,source_id,identity_id,identity_group,manipulation_type,generator_family,compression_slice,robustness_slice,split,generator_disjoint,provenance,usage_note
+real/phone_001.jpg,real,image,real_phone,local-001,,phone-group-001,none,real,native,clean,calibration,no,controlled-consented-collection,internal evaluation only
+fake/face_swap/frame_001.jpg,fake,image,dfdc,clip-123,,original-video-123,face_swap,dfdc-face-swap,native,clean,sealed_test,yes,DFDC metadata.json,subject to DFDC terms
 ```
 
 Labels come only from this file, never from filenames or directory names.

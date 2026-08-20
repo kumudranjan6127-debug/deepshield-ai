@@ -180,7 +180,7 @@ function initDemo(reduced) {
 
   function finish(c) {
     paint(c.score, c.fake ? 'fake' : 'real');
-    ui.cap.textContent = 'confidence';
+    ui.cap.textContent = 'uncalibrated score';
     ui.scan.classList.add('done');
     ui.verdict.className = `badge mock-verdict ${c.fake ? 'badge-danger' : 'badge-success'}`;
     ui.verdict.innerHTML = c.fake

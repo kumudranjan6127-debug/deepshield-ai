@@ -105,7 +105,7 @@ DS.api = {
       result.engine = result.engine || 'live';
       onProgress(100);
       onStage(stages.length - 1, 'Complete');
-      onLog(`done:   prediction=${result.prediction} confidence=${result.confidence}%`);
+      onLog(`done:   prediction=${result.prediction} uncalibrated_score=${result.confidence}%`);
       return result;
     } finally {
       clearInterval(tick);
@@ -127,7 +127,7 @@ DS.api = {
           { label: 'Detecting face regions', weight: 22 },
           { label: 'Preprocessing image', weight: 18 },
           { label: 'Running model inference', weight: 38 },
-          { label: 'Computing confidence', weight: 12 },
+          { label: 'Computing model score', weight: 12 },
         ];
   },
 
@@ -180,7 +180,7 @@ DS.api = {
           const verdict = DS.api._verdictFor(scan);
           onProgress(100);
           onStage(stages.length - 1, 'Complete');
-          onLog(`demo:   prediction=${verdict.prediction} confidence=${verdict.confidence}%`);
+          onLog(`demo:   prediction=${verdict.prediction} uncalibrated_score=${verdict.confidence}%`);
           resolve({
             ...verdict,
             processingTime: Math.round(performance.now() - started),

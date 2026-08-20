@@ -72,7 +72,7 @@
       <p class="lp-lead">
         AI can now generate a human face in under a second — and those faces are
         running fake profiles, fake proofs and fake news right now.
-        DeepShield checks any photo or video and tells you, with a confidence
+        DeepShield checks any photo or video and reports an uncalibrated model
         score and a heatmap showing exactly where it looked.
       </p>
 
@@ -278,7 +278,7 @@
           </svg>
         </div>
         <h3>Get a verdict you can check</h3>
-        <p>Real or deepfake, a confidence score, a risk level, a heatmap of where the model
+        <p>Real or deepfake, an uncalibrated model score, a risk level, a heatmap of where the model
           looked — and a PDF report you can share.</p>
       </article>
     </div>
@@ -308,7 +308,7 @@
       </p>
       <ul class="lp-list" role="list">
         <li><i data-lucide="check" class="icon-sm"></i> Sensitivity map showing which regions changed the prediction</li>
-        <li><i data-lucide="check" class="icon-sm"></i> Per-model confidence, side by side</li>
+        <li><i data-lucide="check" class="icon-sm"></i> Per-model scores, side by side</li>
         <li><i data-lucide="check" class="icon-sm"></i> An honest "models disagreed" flag</li>
         <li><i data-lucide="check" class="icon-sm"></i> Everything included in the PDF report</li>
       </ul>
@@ -366,7 +366,7 @@
         <div class="pipe-node"><i data-lucide="sparkles" class="icon"></i><span>Verifier<br><em>SigLIP</em></span></div>
       </div>
       <span class="pipe-arrow"></span>
-      <div class="pipe-node success"><i data-lucide="shield-check" class="icon"></i><span>Verdict<br><em>+ confidence</em></span></div>
+      <div class="pipe-node success"><i data-lucide="shield-check" class="icon"></i><span>Verdict<br><em>+ model score</em></span></div>
     </div>
 
     <div class="lp-tech-grid">
@@ -433,7 +433,7 @@
         <p>No, and anyone claiming otherwise is selling something. On our test set it is
           right 99.4% of the time, but images that have been screenshotted, heavily
           compressed or made by a brand-new generator are harder. That is why every result
-          comes with a confidence score instead of a bare yes or no.</p>
+          comes with an uncalibrated model score instead of a bare yes or no.</p>
       </details>
       <details>
         <summary>What kind of fakes does it catch best?<i data-lucide="chevron-right" class="icon-sm"></i></summary>
